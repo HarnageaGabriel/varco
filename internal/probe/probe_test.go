@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -63,9 +64,9 @@ func TestDoTLSSNIAndHost(t *testing.T) {
 }
 
 func TestDoRedirectNotFollowed(t *testing.T) {
-	hits := 0
+	var hits atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits++
+		hits.Add(1)
 		http.Redirect(w, r, "http://elsewhere.invalid/", http.StatusFound)
 	}))
 	defer server.Close()
@@ -73,8 +74,8 @@ func TestDoRedirectNotFollowed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.StatusCode != 302 || hits != 1 || got.Certificate != nil {
-		t.Fatalf("status=%d hits=%d", got.StatusCode, hits)
+	if got.StatusCode != 302 || hits.Load() != 1 || got.Certificate != nil {
+		t.Fatalf("status=%d hits=%d", got.StatusCode, hits.Load())
 	}
 }
 
@@ -132,6 +133,9 @@ func TestDoUnsafeMethodAllowed(t *testing.T) {
 }
 
 func TestDoBodyTruncation(t *testing.T) {
+	previous := maxBodyBytes
+	maxBodyBytes = 8 << 20
+	defer func() { maxBodyBytes = previous }()
 	chunk := make([]byte, 1<<20)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		for i := 0; i < 9; i++ {

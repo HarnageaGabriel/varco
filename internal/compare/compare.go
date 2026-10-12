@@ -3,6 +3,7 @@ package compare
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -22,7 +23,7 @@ type Difference struct {
 var comparedHeaders = []string{
 	"access-control-allow-credentials", "access-control-allow-headers", "access-control-allow-methods",
 	"access-control-allow-origin", "access-control-expose-headers", "access-control-max-age",
-	"cross-origin-embedder-policy", "cross-origin-opener-policy", "cross-origin-resource-policy",
+	"content-encoding", "cross-origin-embedder-policy", "cross-origin-opener-policy", "cross-origin-resource-policy",
 	"content-security-policy", "permissions-policy", "referrer-policy", "strict-transport-security",
 	"x-content-type-options", "x-frame-options",
 }
@@ -39,13 +40,21 @@ func Results(path string, oldResult, newResult result.Result, ignoreHeaders []st
 			differences = append(differences, Difference{Path: path, Code: code, Field: field, Old: oldValue, New: newValue})
 		}
 	}
+	addHeader := func(code diag.Code, name string) {
+		oldValues, oldOK := header(oldResult, name)
+		newValues, newOK := header(newResult, name)
+		if oldOK == newOK && slices.Equal(oldValues, newValues) {
+			return
+		}
+		differences = append(differences, Difference{Path: path, Code: code, Field: "header." + name, Old: renderHeader(oldValues, oldOK), New: renderHeader(newValues, newOK)})
+	}
 	add(diag.CodeCompareStatus, "status", fmt.Sprint(oldResult.StatusCode), fmt.Sprint(newResult.StatusCode))
 	if !ignored["location"] {
-		add(diag.CodeCompareLocation, "header.location", header(oldResult, "location"), header(newResult, "location"))
+		addHeader(diag.CodeCompareLocation, "location")
 	}
 	for _, name := range comparedHeaders {
 		if !ignored[name] {
-			add(diag.CodeCompareHeader, "header."+name, header(oldResult, name), header(newResult, name))
+			addHeader(diag.CodeCompareHeader, name)
 		}
 	}
 	add(diag.CodeCompareTLSVersion, "tls.version", oldResult.TLSVersion, newResult.TLSVersion)
@@ -65,13 +74,32 @@ func Results(path string, oldResult, newResult result.Result, ignoreHeaders []st
 	return differences
 }
 
-func header(r result.Result, name string) string {
+// header returns the ordered values of a response header and whether it is
+// present; an absent header differs from one present with an empty value.
+func header(r result.Result, name string) ([]string, bool) {
 	for _, h := range r.Headers {
 		if strings.EqualFold(h.Name, name) {
-			return strings.Join(h.Values, ", ")
+			return h.Values, true
 		}
 	}
-	return ""
+	return nil, false
+}
+
+func renderHeader(values []string, present bool) string {
+	if !present {
+		return "(absent)"
+	}
+	if len(values) == 0 {
+		return `""`
+	}
+	quoted := make([]string, len(values))
+	for i, value := range values {
+		quoted[i] = value
+		if value == "" || len(values) > 1 {
+			quoted[i] = fmt.Sprintf("%q", value)
+		}
+	}
+	return strings.Join(quoted, ", ")
 }
 
 func compareCertificate(add func(diag.Code, string, string, string), oldCert, newCert *result.Certificate) {

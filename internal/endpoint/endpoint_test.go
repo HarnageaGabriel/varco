@@ -2,6 +2,7 @@ package endpoint
 
 import "testing"
 
+// Source: RFC 3986 section 3.2.2 (IPv6 literals are bracketed in authority) and docs/adr/0004-endpoint-syntax.md.
 func TestParse(t *testing.T) {
 	tests := []struct {
 		name, input, want string
@@ -15,6 +16,11 @@ func TestParse(t *testing.T) {
 		{name: "hostname", input: "example.com", port: 443, wantErr: true},
 		{name: "hostname port", input: "example.com:443", port: 443, wantErr: true},
 		{name: "zero port", input: "127.0.0.1:0", port: 443, wantErr: true},
+		// A bare IPv6 address is address-only: net/netip parses the whole string, so a
+		// trailing ":8443" is part of the address and the default port applies.
+		{name: "IPv6 bare looks like port", input: "2001:db8::1:8443", port: 443, want: "[2001:db8::1:8443]:443"},
+		{name: "IPv6 unbracketed with port", input: "2001:db8::1:8443:99999", port: 443, wantErr: true},
+		{name: "IPv6 unbracketed host port", input: "2001:db8:0:0:0:0:0:1:8443", port: 443, wantErr: true},
 		{name: "empty", port: 443, wantErr: true},
 	}
 	for _, test := range tests {

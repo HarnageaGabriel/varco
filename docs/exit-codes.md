@@ -7,5 +7,5 @@ Varco uses stable process exit codes so callers can distinguish comparison resul
 | 0 | Endpoints are identical, or every difference is explicitly accepted. |
 | 1 | Differences were found. |
 | 2 | Command usage or configuration is invalid. |
-| 3 | A network or probe operation failed. |
+| 3 | A network or probe operation failed (for `diff`, on any path; it takes precedence over 1). |
 | 4 | An internal error occurred. |

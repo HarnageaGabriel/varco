@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -83,6 +82,9 @@ func runDiff(args []string, stdout, stderr io.Writer) int {
 	flags.Var(&headerValues, "header", "request header NAME=VALUE (repeatable)")
 	flags.Var(&ignoreHeaders, "ignore-header", "response header to ignore (repeatable)")
 	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		return 2
 	}
 	if *oldValue == "" || *newValue == "" || *host == "" {
@@ -97,8 +99,11 @@ func runDiff(args []string, stdout, stderr io.Writer) int {
 	if *timeout <= 0 {
 		return configFailure(stderr, "--timeout must be positive")
 	}
-	if *rate <= 0 || math.IsNaN(*rate) || math.IsInf(*rate, 0) {
-		return configFailure(stderr, "--rate must be a finite positive number")
+	if err := engine.ValidateRate(*rate); err != nil {
+		return configFailure(stderr, fmt.Sprintf("--rate: %v", err))
+	}
+	if !probe.ValidHost(*host) {
+		return configFailure(stderr, "--host must be non-empty and contain no whitespace, control bytes, / ? # @ or backslash")
 	}
 	defaultPort := uint16(443)
 	if *scheme == "http" {
@@ -124,15 +129,18 @@ func runDiff(args []string, stdout, stderr io.Writer) int {
 		if !strings.HasPrefix(path, "/") {
 			return configFailure(stderr, fmt.Sprintf("path %q must start with /", path))
 		}
+		if !probe.ValidPath(path) {
+			return configFailure(stderr, fmt.Sprintf("path %q contains a space or control byte", path))
+		}
 	}
 	if *sni == "" {
 		*sni = *host
 	}
 	config := engine.DiffConfig{Old: oldEndpoint, New: newEndpoint, Scheme: *scheme, Host: *host, SNI: *sni, Method: strings.ToUpper(*method), Headers: requestHeaders, Paths: paths, Timeout: *timeout, Rate: *rate, IgnoreHeaders: ignoreHeaders, AllowUnsafeMethod: *allowUnsafe}
-	differences, err := engine.Diff(context.Background(), config, clock.Real{}, probe.Do)
+	outcome, err := engine.Diff(context.Background(), config, clock.Real{}, probe.Do)
 	if err != nil {
 		var diagnosticError *diag.Error
-		if errors.As(err, &diagnosticError) && (diagnosticError.Diagnostic.Code == diag.CodeUnsupportedMethod || diagnosticError.Diagnostic.Code == diag.CodeInvalidFlag) {
+		if errors.As(err, &diagnosticError) {
 			_, _ = fmt.Fprintln(stderr, diagnosticError.Error())
 			return 2
 		}
@@ -141,15 +149,22 @@ func runDiff(args []string, stdout, stderr io.Writer) int {
 		return 3
 	}
 	if *format == "json" {
-		err = report.JSON(stdout, differences)
+		err = report.JSON(stdout, outcome.Differences)
 	} else {
-		err = report.Table(stdout, differences)
+		err = report.Table(stdout, outcome.Differences)
 	}
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, "report:", err)
 		return 4
 	}
-	if len(differences) != 0 {
+	for _, failure := range outcome.Failures {
+		diagnostic, _ := diag.New(diag.CodeEndpointUnreachable, fmt.Sprintf("path %s via %s: %v", failure.Path, failure.Endpoint, failure.Err))
+		_, _ = fmt.Fprintf(stderr, "%s: %s\n", diagnostic.Code, diagnostic.Message)
+	}
+	if len(outcome.Failures) != 0 {
+		return 3
+	}
+	if len(outcome.Differences) != 0 {
 		return 1
 	}
 	return 0
@@ -162,9 +177,21 @@ func parseHeaders(values []string) ([]result.Header, error) {
 		if !ok || name == "" {
 			return nil, fmt.Errorf("--header must use NAME=VALUE")
 		}
+		if !probe.ValidHeaderName(name) {
+			return nil, fmt.Errorf("invalid request header name %q", name)
+		}
+		if !probe.ValidHeaderValue(headerValue) {
+			return nil, fmt.Errorf("invalid value for request header %s", name)
+		}
 		canonical := http.CanonicalHeaderKey(name)
-		if canonical == "Authorization" || canonical == "Cookie" || canonical == "Proxy-Authorization" {
+		if probe.CredentialHeader(canonical) {
 			return nil, fmt.Errorf("request header %s is not allowed", canonical)
+		}
+		if canonical == "Host" {
+			return nil, fmt.Errorf("request header Host is not allowed; use --host")
+		}
+		if probe.ForbiddenHeader(canonical) {
+			return nil, fmt.Errorf("request header %s is set by varco and cannot be overridden", canonical)
 		}
 		headers = append(headers, result.Header{Name: canonical, Values: []string{headerValue}})
 	}
@@ -182,6 +209,9 @@ func runVersion(args []string, stdout, stderr io.Writer) int {
 	flags.SetOutput(stderr)
 	jsonOutput := flags.Bool("json", false, "print version as JSON")
 	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		return 2
 	}
 	if flags.NArg() != 0 {
