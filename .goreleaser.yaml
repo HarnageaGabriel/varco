@@ -1,0 +1,44 @@
+version: 2
+
+builds:
+  - id: varco
+    main: ./cmd/varco
+    binary: varco
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - >-
+        -s -w
+        -X github.com/HarnageaGabriel/varco/internal/version.Version={{.Version}}
+        -X github.com/HarnageaGabriel/varco/internal/version.Commit={{.Commit}}
+        -X github.com/HarnageaGabriel/varco/internal/version.Date={{.Date}}
+
+archives:
+  - id: varco
+    ids: [varco]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: checksums.txt
+
+homebrew_casks:
+  - name: varco
+    repository:
+      owner: HarnageaGabriel
+      name: homebrew-tap
+    homepage: https://github.com/HarnageaGabriel/varco
+    description: Compare HTTP endpoint behavior safely and deterministically
+    license: Apache-2.0
+
+changelog:
+  use: git

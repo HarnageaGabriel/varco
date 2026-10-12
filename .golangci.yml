@@ -1,0 +1,59 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - depguard
+    - forbidigo
+    - bodyclose
+    - contextcheck
+    - errcheck
+    - errorlint
+    - gocritic
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - nilerr
+    - noctx
+    - prealloc
+    - revive
+    - staticcheck
+    - unconvert
+    - unused
+  settings:
+    depguard:
+      rules:
+        pure:
+          list-mode: lax
+          files:
+            - "**/internal/diag/**/*.go"
+            - "**/internal/plan/**/*.go"
+            - "**/internal/compare/**/*.go"
+            - "**/internal/report/**/*.go"
+            - "!$test"
+          deny:
+            - pkg: "net/http$"
+              desc: "Pure packages must not perform I/O (CONVENTIONS.md)."
+            - pkg: "os$"
+              desc: "Pure packages must not perform I/O (CONVENTIONS.md)."
+            - pkg: "os/exec$"
+              desc: "Pure packages must not perform I/O (CONVENTIONS.md)."
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: '^time\.Now$'
+          msg: "Inject a clock (CONVENTIONS.md)."
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - gosec
+          - gocritic
+
+formatters:
+  enable:
+    - gofumpt
