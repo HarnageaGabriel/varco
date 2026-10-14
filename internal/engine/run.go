@@ -164,7 +164,7 @@ func runCase(ctx context.Context, item model.ProbeCase, config RunConfig, limite
 	observations := make([]model.Observation, len(targets))
 	for i, target := range targets {
 		if err := limiter.wait(ctx); err != nil {
-			return cancelledEvaluation(item), nil
+			return cancelledEvaluation(item), nil //nolint:nilerr // cancellation is a skipped case, not a run error
 		}
 		request := probe.Request{
 			Endpoint: target,
@@ -179,7 +179,7 @@ func runCase(ctx context.Context, item model.ProbeCase, config RunConfig, limite
 		captured, err := probeFn(ctx, request)
 		if err != nil {
 			if ctx.Err() != nil {
-				return cancelledEvaluation(item), nil
+				return cancelledEvaluation(item), nil //nolint:nilerr // cancellation is a skipped case, not a run error
 			}
 			var diagnosticError *diag.Error
 			if errors.As(err, &diagnosticError) {

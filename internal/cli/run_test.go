@@ -36,11 +36,11 @@ func statusServer(status int) *httptest.Server {
 // Source: docs/run.md and docs/adr/0007-verdict-model.md: `varco run` executes a
 // plan from JSON or manifests and returns the documented exit codes.
 func TestRunCommand(t *testing.T) {
-	old, new, same := statusServer(http.StatusOK), statusServer(http.StatusNotFound), statusServer(http.StatusOK)
+	old, other, same := statusServer(http.StatusOK), statusServer(http.StatusNotFound), statusServer(http.StatusOK)
 	defer old.Close()
-	defer new.Close()
+	defer other.Close()
 	defer same.Close()
-	oldAddr, newAddr := old.Listener.Addr().String(), new.Listener.Addr().String()
+	oldAddr, otherAddr := old.Listener.Addr().String(), other.Listener.Addr().String()
 
 	oneCase := planJSON(t, []plan.Case{{ID: "aaaaaaaaaaaa", Host: "app.example", Scheme: "http", Method: "GET", Path: "/", Family: "base"}})
 	deadListener, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
@@ -76,8 +76,8 @@ func TestRunCommand(t *testing.T) {
 	}{
 		{"equivalent", oneCase, []string{"--plan", "-", "--old", oldAddr, "--new", oldAddr}, 0, "VERDICT", ""},
 		{"equivalent json", oneCase, []string{"--plan", "-", "--format", "json", "--old", oldAddr, "--new", oldAddr}, 0, `"verdict": "EQUIVALENT"`, ""},
-		{"different", oneCase, []string{"--plan", "-", "--old", oldAddr, "--new", newAddr}, 1, "VAR-CMP-0001", ""},
-		{"accepted by exception", oneCase, []string{"--plan", "-", "--old", oldAddr, "--new", newAddr, "--exceptions", exceptionPath}, 0, "accepted (status): known 404", ""},
+		{"different", oneCase, []string{"--plan", "-", "--old", oldAddr, "--new", otherAddr}, 1, "VAR-CMP-0001", ""},
+		{"accepted by exception", oneCase, []string{"--plan", "-", "--old", oldAddr, "--new", otherAddr, "--exceptions", exceptionPath}, 0, "accepted (status): known 404", ""},
 		{"inconclusive", oneCase, []string{"--plan", "-", "--old", oldAddr, "--new", deadAddress}, 3, "VAR-NET-0001", ""},
 		{"bad exceptions", oneCase, []string{"--plan", "-", "--old", oldAddr, "--new", oldAddr, "--exceptions", badExceptionPath}, 2, "", "VAR-CFG-0002"},
 		{"missing exceptions file", oneCase, []string{"--plan", "-", "--old", oldAddr, "--new", oldAddr, "--exceptions", filepath.Join(dir, "nope.yaml")}, 2, "", "nope.yaml"},

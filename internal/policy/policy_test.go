@@ -188,13 +188,14 @@ func TestEvaluateFieldShorthands(t *testing.T) {
 		{"body", "body", true},
 		{"location", "header.via", false},
 	}
+	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 	for _, test := range tests {
 		content := "version: 1\nexceptions:\n  - id: e\n    reason: r\n    match:\n      field: \"" + test.pattern + "\"\n"
 		file, err := policy.Load([]byte(content))
 		if err != nil {
 			t.Fatalf("%s: %v", test.pattern, err)
 		}
-		evaluation := policy.Evaluate(model.ProbeCase{ID: "c"}, []compare.Difference{difference(test.field)}, file, time.Now())
+		evaluation := policy.Evaluate(model.ProbeCase{ID: "c"}, []compare.Difference{difference(test.field)}, file, now)
 		if got := evaluation.Differences[0].Accepted; got != test.want {
 			t.Fatalf("pattern %q field %q accepted = %v, want %v", test.pattern, test.field, got, test.want)
 		}

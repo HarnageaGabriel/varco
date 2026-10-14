@@ -114,7 +114,7 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		Concurrency: *concurrency,
 		Exceptions:  exceptionFile,
 		Unsupported: manifest.Unsupported,
-		Now:         time.Now().UTC(),
+		Now:         clock.Real{}.Now().UTC(),
 	}
 	if !*quiet {
 		config.Progress = func(done, total int, item model.ProbeCase, outcome model.Outcome) {

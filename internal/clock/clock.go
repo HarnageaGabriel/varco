@@ -18,6 +18,11 @@ type Real struct{}
 // NewTicker creates a system ticker.
 func (Real) NewTicker(d time.Duration) Ticker { return realTicker{time.NewTicker(d)} }
 
+// Now reports the current wall-clock time.
+func (Real) Now() time.Time {
+	return time.Now() //nolint:forbidigo // internal/clock is the single wall-clock edge (CONVENTIONS.md).
+}
+
 type realTicker struct{ *time.Ticker }
 
 func (t realTicker) C() <-chan time.Time { return t.Ticker.C }
