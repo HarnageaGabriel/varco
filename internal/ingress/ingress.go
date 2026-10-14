@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
+	"strconv"
 
 	"go.yaml.in/yaml/v3"
 
@@ -40,6 +42,8 @@ type Ingress struct {
 	Annotations map[string]string
 	Rules       []Rule
 	TLS         []TLS
+	// DefaultBackend reports whether spec.defaultBackend is set.
+	DefaultBackend bool
 }
 
 // Key returns the "namespace/name" identity used by plan sources and findings.
@@ -102,11 +106,67 @@ func parseRoot(document yaml.Node, depth int) ([]Ingress, error) {
 	if root.Kind != yaml.MappingNode {
 		return nil, manifestError("document is not a Kubernetes object")
 	}
+	// The apiVersion/kind header is decoded first, so a non-Ingress document
+	// whose body does not match the Ingress schema is ignored instead of
+	// aborting the whole plan.
+	var header rawHeader
+	if err := root.Decode(&header); err != nil {
+		return nil, manifestError("cannot decode resource header: %v", err)
+	}
+	switch header.Kind {
+	case KindList:
+		return parseList(root, depth)
+	case KindIngress:
+	default:
+		return nil, nil
+	}
+	if header.APIVersion != APIVersion {
+		return nil, manifestError("unsupported Ingress apiVersion %q; only %s is supported", header.APIVersion, APIVersion)
+	}
 	var raw rawDocument
 	if err := root.Decode(&raw); err != nil {
 		return nil, manifestError("cannot decode resource: %v", err)
 	}
-	return convert(raw, depth)
+	resource, err := raw.ingress()
+	if err != nil {
+		return nil, err
+	}
+	return []Ingress{resource}, nil
+}
+
+// parseList walks the items of a kind: List document without decoding them into
+// typed structs first, so a nested non-Ingress item is ignored cheaply. Nesting
+// is bounded so a crafted manifest cannot recurse without end.
+func parseList(root yaml.Node, depth int) ([]Ingress, error) {
+	if depth >= maxDocumentDepth {
+		return nil, manifestError("list nesting deeper than %d documents", maxDocumentDepth)
+	}
+	items, ok := mappingValue(root, "items")
+	if !ok || items.Kind != yaml.SequenceNode {
+		return nil, nil
+	}
+	var resources []Ingress
+	for _, item := range items.Content {
+		found, err := parseRoot(*item, depth+1)
+		if err != nil {
+			return nil, err
+		}
+		resources = append(resources, found...)
+	}
+	return resources, nil
+}
+
+// mappingValue returns the value node of a key in a mapping node.
+func mappingValue(node yaml.Node, key string) (yaml.Node, bool) {
+	if node.Kind != yaml.MappingNode {
+		return yaml.Node{}, false
+	}
+	for index := 0; index+1 < len(node.Content); index += 2 {
+		if node.Content[index].Value == key {
+			return *node.Content[index+1], true
+		}
+	}
+	return yaml.Node{}, false
 }
 
 // documentRoot unwraps the document node and reports whether it holds content.
@@ -127,31 +187,6 @@ func documentRoot(document yaml.Node) (yaml.Node, bool) {
 	return node, true
 }
 
-func convert(raw rawDocument, depth int) ([]Ingress, error) {
-	switch raw.Kind {
-	case KindList:
-		if depth >= maxDocumentDepth {
-			return nil, manifestError("list nesting deeper than %d documents", maxDocumentDepth)
-		}
-		var resources []Ingress
-		for _, item := range raw.Items {
-			found, err := convert(item, depth+1)
-			if err != nil {
-				return nil, err
-			}
-			resources = append(resources, found...)
-		}
-		return resources, nil
-	case KindIngress:
-	default:
-		return nil, nil
-	}
-	if raw.APIVersion != APIVersion {
-		return nil, manifestError("unsupported Ingress apiVersion %q; only %s is supported", raw.APIVersion, APIVersion)
-	}
-	return []Ingress{raw.ingress()}, nil
-}
-
 // manifestError builds a VAR-PLAN-0003 diagnostic error.
 func manifestError(format string, args ...any) error {
 	message := fmt.Sprintf(format, args...)
@@ -162,25 +197,33 @@ func manifestError(format string, args ...any) error {
 	return &diag.Error{Diagnostic: diagnostic}
 }
 
-// rawDocument is the wire shape of one YAML or JSON document.
+// rawHeader is the apiVersion/kind pair that decides whether a document is
+// worth decoding into the typed Ingress shape.
+type rawHeader struct {
+	APIVersion string `yaml:"apiVersion"`
+	Kind       string `yaml:"kind"`
+}
+
+// rawDocument is the wire shape of one Ingress document.
 type rawDocument struct {
-	APIVersion string        `yaml:"apiVersion"`
-	Kind       string        `yaml:"kind"`
-	Metadata   rawMetadata   `yaml:"metadata"`
-	Spec       rawSpec       `yaml:"spec"`
-	Items      []rawDocument `yaml:"items"`
+	APIVersion string      `yaml:"apiVersion"`
+	Kind       string      `yaml:"kind"`
+	Metadata   rawMetadata `yaml:"metadata"`
+	Spec       rawSpec     `yaml:"spec"`
 }
 
 type rawMetadata struct {
-	Namespace   string            `yaml:"namespace"`
-	Name        string            `yaml:"name"`
-	Annotations map[string]string `yaml:"annotations"`
+	Namespace   string         `yaml:"namespace"`
+	Name        string         `yaml:"name"`
+	Annotations map[string]any `yaml:"annotations"`
 }
 
 type rawSpec struct {
 	IngressClassName string    `yaml:"ingressClassName"`
 	Rules            []rawRule `yaml:"rules"`
 	TLS              []rawTLS  `yaml:"tls"`
+	// DefaultBackend only needs its presence, not its shape.
+	DefaultBackend *yaml.Node `yaml:"defaultBackend"`
 }
 
 type rawRule struct {
@@ -202,17 +245,29 @@ type rawTLS struct {
 	SecretName string   `yaml:"secretName"`
 }
 
-func (raw rawDocument) ingress() Ingress {
+func (raw rawDocument) ingress() (Ingress, error) {
 	resource := Ingress{
-		APIVersion: raw.APIVersion,
-		Kind:       raw.Kind,
-		Namespace:  raw.Metadata.Namespace,
-		Name:       raw.Metadata.Name,
-		ClassName:  raw.Spec.IngressClassName,
+		APIVersion:     raw.APIVersion,
+		Kind:           raw.Kind,
+		Namespace:      raw.Metadata.Namespace,
+		Name:           raw.Metadata.Name,
+		ClassName:      raw.Spec.IngressClassName,
+		DefaultBackend: hasDefaultBackend(raw.Spec.DefaultBackend),
 	}
 	if len(raw.Metadata.Annotations) != 0 {
 		resource.Annotations = make(map[string]string, len(raw.Metadata.Annotations))
-		for name, value := range raw.Metadata.Annotations {
+		names := make([]string, 0, len(raw.Metadata.Annotations))
+		for name := range raw.Metadata.Annotations {
+			names = append(names, name)
+		}
+		// Sorted so a manifest with more than one bad annotation always fails on
+		// the same field.
+		sort.Strings(names)
+		for _, name := range names {
+			value, err := stringifyAnnotation(name, raw.Metadata.Annotations[name])
+			if err != nil {
+				return Ingress{}, err
+			}
 			resource.Annotations[name] = value
 		}
 	}
@@ -228,5 +283,37 @@ func (raw rawDocument) ingress() Ingress {
 	for _, entry := range raw.Spec.TLS {
 		resource.TLS = append(resource.TLS, TLS{Hosts: append([]string(nil), entry.Hosts...), SecretName: entry.SecretName})
 	}
-	return resource
+	return resource, nil
+}
+
+// hasDefaultBackend reports whether spec.defaultBackend is present and not null.
+func hasDefaultBackend(node *yaml.Node) bool {
+	if node == nil {
+		return false
+	}
+	return !(node.Kind == yaml.ScalarNode && (node.Tag == "!!null" || node.Value == ""))
+}
+
+// stringifyAnnotation converts a scalar annotation value to its string form, so
+// an unquoted boolean or number (`enable-cors: true`) is honored. A non-scalar
+// value is a manifest error naming the field.
+func stringifyAnnotation(name string, value any) (string, error) {
+	switch typed := value.(type) {
+	case nil:
+		return "", nil
+	case string:
+		return typed, nil
+	case bool:
+		return strconv.FormatBool(typed), nil
+	case int:
+		return strconv.Itoa(typed), nil
+	case int64:
+		return strconv.FormatInt(typed, 10), nil
+	case uint64:
+		return strconv.FormatUint(typed, 10), nil
+	case float64:
+		return strconv.FormatFloat(typed, 'g', -1, 64), nil
+	default:
+		return "", manifestError("metadata.annotations[%q] must be a scalar value", name)
+	}
 }

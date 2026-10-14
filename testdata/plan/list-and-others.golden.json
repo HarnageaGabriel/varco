@@ -74,7 +74,7 @@
       "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
     },
     {
-      "id": "85c0db544d2e",
+      "id": "72e2faab6a7f",
       "host": "status.example.com",
       "scheme": "http",
       "method": "GET",
@@ -85,7 +85,7 @@
         "rule": 0,
         "path": 0
       },
-      "note": "ingress-nginx answers a missing trailing slash with 301 (blog behavior 4)"
+      "note": "declared without a trailing slash; probes the same path with an extra slash (blog behavior 4); probes slash handling, expected behavior unverified (VERIFY)"
     },
     {
       "id": "86c27e7faa98",

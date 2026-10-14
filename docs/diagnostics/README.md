@@ -18,4 +18,6 @@
 | [VAR-PLAN-0004](VAR-PLAN-0004.md) | warning | Wildcard host substituted |
 | [VAR-PLAN-0005](VAR-PLAN-0005.md) | warning | Rule without host |
 | [VAR-PLAN-0006](VAR-PLAN-0006.md) | warning | Host-wide regex scope |
+| [VAR-PLAN-0007](VAR-PLAN-0007.md) | warning | Annotation value is not a boolean |
+| [VAR-PLAN-0008](VAR-PLAN-0008.md) | warning | No plannable HTTP path |
 | [VAR-RUN-0001](VAR-RUN-0001.md) | error | Unsupported method |

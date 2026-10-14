@@ -46,7 +46,7 @@
       "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
     },
     {
-      "id": "ccf84d948321",
+      "id": "99f76c122a78",
       "host": "api.example.com",
       "sni": "api.example.com",
       "scheme": "https",
@@ -58,7 +58,7 @@
         "rule": 0,
         "path": 1
       },
-      "note": "repeated slashes are normalized or answered with 301 (blog behavior 5)"
+      "note": "repeated slashes are normalized or answered with 301 (blog behavior 5); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
     },
     {
       "id": "d7deb8a81a38",
@@ -76,7 +76,7 @@
       "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
     },
     {
-      "id": "ec50c395b930",
+      "id": "6d2df0697cf9",
       "host": "api.example.com",
       "sni": "api.example.com",
       "scheme": "https",
@@ -88,7 +88,7 @@
         "rule": 0,
         "path": 1
       },
-      "note": "repeated slashes are normalized or answered with 301 (blog behavior 5)"
+      "note": "repeated slashes are normalized or answered with 301 (blog behavior 5); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
     },
     {
       "id": "c20f2c6f060c",
@@ -105,7 +105,7 @@
       "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
     },
     {
-      "id": "cdee1af78565",
+      "id": "87c71e0f737d",
       "host": "api.example.com",
       "sni": "api.example.com",
       "scheme": "https",
@@ -117,7 +117,7 @@
         "rule": 0,
         "path": 0
       },
-      "note": "repeated slashes are normalized or answered with 301 (blog behavior 5); path \"^/legacy\" is a regex and is sampled as \"/legacy\""
+      "note": "repeated slashes are normalized or answered with 301 (blog behavior 5); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2); path \"^/legacy\" is a regex and is sampled as \"/legacy\""
     },
     {
       "id": "0aa215d8e69b",
@@ -164,7 +164,7 @@
       "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
     },
     {
-      "id": "feff0cc2a4ed",
+      "id": "d2293f9cc94f",
       "host": "api.example.com",
       "sni": "api.example.com",
       "scheme": "https",
@@ -176,7 +176,7 @@
         "rule": 0,
         "path": 1
       },
-      "note": "another Ingress of this host enables regex matching, which is host-wide (blog behavior 2)"
+      "note": "another Ingress of this host enables regex matching, which is host-wide (blog behavior 2); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
     },
     {
       "id": "ebbacf5d13ca",
@@ -194,7 +194,7 @@
       "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
     },
     {
-      "id": "3dc4d7e74f23",
+      "id": "88443c4c856c",
       "host": "api.example.com",
       "sni": "api.example.com",
       "scheme": "https",
@@ -206,7 +206,7 @@
         "rule": 0,
         "path": 1
       },
-      "note": "use-regex or rewrite-target makes matching case-insensitive (blog behaviors 1 to 3)"
+      "note": "use-regex or rewrite-target makes matching case-insensitive (blog behaviors 1 to 3); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
     },
     {
       "id": "185912daaff2",
@@ -223,7 +223,7 @@
       "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
     },
     {
-      "id": "fb58fa1dca1f",
+      "id": "787837b80263",
       "host": "api.example.com",
       "sni": "api.example.com",
       "scheme": "https",
@@ -235,7 +235,7 @@
         "rule": 0,
         "path": 0
       },
-      "note": "the path looks like a regex, so matching may be case-insensitive (blog behaviors 1 to 3); path \"^/legacy\" is a regex and is sampled as \"/legacy\""
+      "note": "the path looks like a regex, so matching may be case-insensitive (blog behaviors 1 to 3); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2); path \"^/legacy\" is a regex and is sampled as \"/legacy\""
     },
     {
       "id": "d94270638da3",
@@ -282,7 +282,7 @@
       "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
     },
     {
-      "id": "1df7ac2b4790",
+      "id": "a9e9595df1f1",
       "host": "api.example.com",
       "sni": "api.example.com",
       "scheme": "https",
@@ -293,7 +293,8 @@
         "ingress": "prod/checkout-header",
         "rule": 0,
         "path": 1
-      }
+      },
+      "note": "an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
     },
     {
       "id": "bfb60f8c176d",
@@ -310,7 +311,7 @@
       "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
     },
     {
-      "id": "f196dbcc52f6",
+      "id": "6cdb25ce3e1e",
       "host": "api.example.com",
       "sni": "api.example.com",
       "scheme": "https",
@@ -322,7 +323,65 @@
         "rule": 0,
         "path": 1
       },
-      "note": "ingress-nginx answers a missing trailing slash with 301 (blog behavior 4)"
+      "note": "declared without a trailing slash; probes the same path with an extra slash (blog behavior 4); probes slash handling, expected behavior unverified (VERIFY); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
+    },
+    {
+      "id": "89e604eaf008",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/header/varco-probe",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "068fe4ecf292",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/header/varco-probe",
+      "family": "subpath",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
+    },
+    {
+      "id": "91495db5ff61",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/headervarco",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "518ab8567365",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/headervarco",
+      "family": "prefix-boundary",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "with use-regex the path is matched as a prefix regex, so /api may match /apivarco (blog behavior 1); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
     },
     {
       "id": "62d9fe3e821a",
@@ -340,7 +399,7 @@
       "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
     },
     {
-      "id": "cf43437bb28b",
+      "id": "5cf443c95a35",
       "host": "api.example.com",
       "sni": "api.example.com",
       "scheme": "https",
@@ -351,7 +410,68 @@
         "ingress": "prod/checkout-api",
         "rule": 0,
         "path": 1
-      }
+      },
+      "note": "an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
+    },
+    {
+      "id": "738b352b2515",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/health/varco-probe",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 1,
+        "annotation": "nginx.ingress.kubernetes.io/ssl-redirect"
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "fcdf6dc34c02",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/health/varco-probe",
+      "family": "subpath",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
+    },
+    {
+      "id": "1c0407efd271",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/healthvarco",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 1,
+        "annotation": "nginx.ingress.kubernetes.io/ssl-redirect"
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "ccab8b49acb8",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/healthvarco",
+      "family": "prefix-boundary",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "with use-regex the path is matched as a prefix regex, so /api may match /apivarco (blog behavior 1); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
     },
     {
       "id": "f06f2ffc70d6",
@@ -368,7 +488,7 @@
       "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
     },
     {
-      "id": "fd38f9f93ef3",
+      "id": "723aee3da215",
       "host": "api.example.com",
       "sni": "api.example.com",
       "scheme": "https",
@@ -380,7 +500,7 @@
         "rule": 0,
         "path": 0
       },
-      "note": "path \"^/legacy\" is a regex and is sampled as \"/legacy\""
+      "note": "an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2); path \"^/legacy\" is a regex and is sampled as \"/legacy\""
     },
     {
       "id": "a088f7945713",
@@ -427,7 +547,7 @@
       "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
     },
     {
-      "id": "9ff15b5937bd",
+      "id": "1843a7c57c36",
       "host": "api.example.com",
       "sni": "api.example.com",
       "scheme": "https",
@@ -439,7 +559,7 @@
         "rule": 0,
         "path": 1
       },
-      "note": "dot segments are resolved before matching (blog behavior 5)"
+      "note": "dot segments are resolved before matching (blog behavior 5); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
     },
     {
       "id": "45255e447077",
@@ -457,7 +577,7 @@
       "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
     },
     {
-      "id": "74fc510e3ea4",
+      "id": "e2b0ca363326",
       "host": "api.example.com",
       "sni": "api.example.com",
       "scheme": "https",
@@ -469,7 +589,7 @@
         "rule": 0,
         "path": 1
       },
-      "note": "dot segments are resolved before matching (blog behavior 5)"
+      "note": "dot segments are resolved before matching (blog behavior 5); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
     },
     {
       "id": "a7131812432d",
@@ -486,7 +606,7 @@
       "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
     },
     {
-      "id": "ca3bd3f96980",
+      "id": "d016c99a6ffc",
       "host": "api.example.com",
       "sni": "api.example.com",
       "scheme": "https",
@@ -498,7 +618,7 @@
         "rule": 0,
         "path": 0
       },
-      "note": "dot segments are resolved before matching (blog behavior 5); path \"^/legacy\" is a regex and is sampled as \"/legacy\""
+      "note": "dot segments are resolved before matching (blog behavior 5); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2); path \"^/legacy\" is a regex and is sampled as \"/legacy\""
     }
   ],
   "unsupported": [],

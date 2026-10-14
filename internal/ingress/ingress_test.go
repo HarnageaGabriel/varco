@@ -297,3 +297,86 @@ metadata:
 		t.Fatalf("Parse() is not deterministic: %#v vs %#v", first, second)
 	}
 }
+
+// TestParseAnnotationScalars covers accepted finding Minor 3: annotations are
+// decoded as map[string]any and scalars are stringified, so an unquoted
+// `enable-cors: true` works and a non-scalar is a targeted VAR-PLAN-0003.
+func TestParseAnnotationScalars(t *testing.T) {
+	tests := []struct {
+		name        string
+		annotations string
+		want        map[string]string
+		wantErr     bool
+	}{
+		{name: "unquoted bool", annotations: "enable-cors: true", want: map[string]string{"enable-cors": "true"}},
+		{name: "unquoted int", annotations: "weight: 10", want: map[string]string{"weight": "10"}},
+		{name: "unquoted float", annotations: "ratio: 0.5", want: map[string]string{"ratio": "0.5"}},
+		{name: "null is empty", annotations: "empty:", want: map[string]string{"empty": ""}},
+		{name: "mapping is an error", annotations: "bad:\n  nested: 1", wantErr: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			input := "apiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n  name: a\n  annotations:\n    " +
+				strings.ReplaceAll(test.annotations, "\n", "\n    ") + "\nspec: {}\n"
+			got, err := Parse(strings.NewReader(input))
+			if test.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "VAR-PLAN-0003") {
+					t.Fatalf("Parse() error = %v, want VAR-PLAN-0003", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != 1 || !reflect.DeepEqual(got[0].Annotations, test.want) {
+				t.Fatalf("annotations = %#v, want %#v", got, test.want)
+			}
+		})
+	}
+}
+
+// TestParseIgnoresNonIngressWithUnexpectedTypes covers accepted finding Minor 3:
+// the kind is checked before the body is decoded, so a non-Ingress document
+// whose fields do not match the Ingress schema never aborts the plan.
+func TestParseIgnoresNonIngressWithUnexpectedTypes(t *testing.T) {
+	input := `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: settings
+  annotations:
+    retries: 3
+    hosts: [a, b]
+data:
+  nested: {a: [1, 2]}
+`
+	got, err := Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("a non-Ingress document must be ignored: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("resources = %#v, want none", got)
+	}
+}
+
+// TestParseDefaultBackend covers accepted finding Minor 5: spec.defaultBackend is
+// recorded so plan can report an Ingress that serves only the default backend.
+func TestParseDefaultBackend(t *testing.T) {
+	input := `apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: catch-all
+spec:
+  defaultBackend:
+    service:
+      name: fallback
+      port:
+        number: 80
+`
+	got, err := Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || !got[0].DefaultBackend {
+		t.Fatalf("resources = %#v, want one Ingress with DefaultBackend", got)
+	}
+}

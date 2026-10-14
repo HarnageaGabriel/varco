@@ -41,6 +41,10 @@ const (
 	CodePlanRuleWithoutHost Code = "VAR-PLAN-0005"
 	// CodePlanRegexHostWide reports host-wide regex scope in ingress-nginx.
 	CodePlanRegexHostWide Code = "VAR-PLAN-0006"
+	// CodePlanAnnotationBool reports an annotation whose value is not a boolean.
+	CodePlanAnnotationBool Code = "VAR-PLAN-0007"
+	// CodePlanNoPath reports an Ingress or rule with no plannable HTTP path.
+	CodePlanNoPath Code = "VAR-PLAN-0008"
 )
 
 // Severity is a diagnostic impact level.
@@ -134,6 +138,8 @@ func List() []Entry {
 		{Code: CodePlanWildcardHost, Area: "PLAN", Title: "Wildcard host substituted", Severity: SeverityWarning, Description: "A rule declares a wildcard host; cases use the concrete host varco-probe.<zone>.", Remediation: "Confirm that the wildcard certificate and routing cover an arbitrary single-label subdomain."},
 		{Code: CodePlanRuleWithoutHost, Area: "PLAN", Title: "Rule without host", Severity: SeverityWarning, Description: "A rule declares no host and no default host was provided, so no case could be generated for it.", Remediation: "Pass --default-host, or give the rule an explicit host."},
 		{Code: CodePlanRegexHostWide, Area: "PLAN", Title: "Host-wide regex scope", Severity: SeverityWarning, Description: "use-regex or rewrite-target on one Ingress makes ingress-nginx match every path of that host as regex, including paths declared by other Ingresses.", Remediation: "Check every path of this host explicitly; the gateway implementation may match them literally."},
+		{Code: CodePlanAnnotationBool, Area: "PLAN", Title: "Annotation value is not a boolean", Severity: SeverityWarning, Description: "An annotation that ingress-nginx reads as a boolean does not parse as one, so varco treats it as unset.", Remediation: "Set the annotation to a boolean value such as true or false, or remove it."},
+		{Code: CodePlanNoPath, Area: "PLAN", Title: "No plannable HTTP path", Severity: SeverityWarning, Description: "An Ingress serves only spec.defaultBackend, or a rule has no HTTP path, so varco can plan no case for it.", Remediation: "Add an HTTP path with a backend, or probe the default backend manually."},
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Code < entries[j].Code })
 	return entries

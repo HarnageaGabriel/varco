@@ -59,7 +59,7 @@ Each family isolates one behavior so a difference can be attributed to it.
 | Family | Request | Why it exists |
 |---|---|---|
 | `base` | the path verbatim | the declared route |
-| `trailing-slash` | toggled trailing slash | ingress-nginx answers a missing slash on a path declared with one with `301`; regex paths do not redirect (behavior 4) |
+| `trailing-slash` | toggled trailing slash | probes the other slash form; the note states the direction probed and does not assume the answer (behavior 4) |
 | `subpath` | `path + /varco-probe` | a deeper path must still route |
 | `prefix-boundary` | `path + varco` (for example `/api` -> `/apivarco`) | `Prefix` matches element-wise, so this must not match; with `use-regex` the prefix is a regex and it may match (behavior 1) |
 | `case-flip` | path with letter case swapped | `use-regex` and `rewrite-target` make matching case-insensitive for the whole host (behaviors 1 to 3) |
@@ -69,13 +69,15 @@ Each family isolates one behavior so a difference can be attributed to it.
 | `cors-preflight` | `OPTIONS` with `Origin: https://varco.invalid` and `Access-Control-Request-Method: GET` | `enable-cors` answers preflight (plus `Access-Control-Request-Headers` when `cors-allow-headers` is set) |
 | `rewrite` | the `base` and `subpath` requests | `rewrite-target` rewrites the upstream path (behavior 3) |
 | `app-root` | `GET /` | the `app-root` annotation redirects `/` to the application root |
-| `redirect-annotation` | `GET path` | `permanent-redirect` and `temporal-redirect` answer with a redirect |
+| `redirect-annotation` | `GET path` | `permanent-redirect` and `temporal-redirect` answer with a redirect; the expected code comes from `permanent-redirect-code`/`temporal-redirect-code` (default 301/302) and is recorded in the note |
 
 Rule host and path type decide what is emitted: `Exact` paths get `base`,
 `trailing-slash` (unless regex), `case-flip` (when matching is case-insensitive),
 `dot-segments` and `double-slash`; `Prefix` adds `subpath` and
 `prefix-boundary`; `ImplementationSpecific` is treated as `Prefix`-like with a
-note, because that is what ingress-nginx does. An omitted path is treated as `/`
+note, because that is what ingress-nginx does. When a host's regex scope is
+active, an `Exact` path is matched as a prefix regex too, so it also gets
+`subpath` and `prefix-boundary`, with a note citing blog behavior 2. An omitted path is treated as `/`
 with a note. A path containing regex metacharacters (`^$()[]{}*+?|\`) is only
 sampled when it has a literal prefix with an optional `^` anchor and one of a
 small set of suffixes, otherwise the path is reported as unsupported rather than
@@ -89,6 +91,9 @@ guessed.
 host-wide regex matching. Planning then adds a `case-flip` case for every
 `Exact` and `Prefix` path of that host, including paths declared by other
 Ingress resources, and records a `VAR-PLAN-0006` warning naming the host.
+Annotation booleans (`use-regex`, `ssl-redirect`, `force-ssl-redirect`,
+`enable-cors`) are parsed with `strconv.ParseBool`; an unparsable value is
+treated as unset and records a `VAR-PLAN-0007` warning.
 
 Hosts for TLS cases use `scheme: https` with `sni` equal to the host. A
 `spec.tls` entry with no hosts is the default certificate and covers every rule
@@ -101,18 +106,35 @@ reported as `VAR-PLAN-0005`.
 
 ## Findings
 
+Findings are the `unsupported` array: work varco could not plan.
+
 | Code | Meaning |
 |---|---|
-| `VAR-PLAN-0001` | an annotation varco cannot test black-box, or one unknown to varco |
+| `VAR-PLAN-0001` | an annotation varco cannot test black-box, or one unknown to varco (including `cors-allow-headers` without `enable-cors: true`) |
 | `VAR-PLAN-0002` | a regex path whose sample cannot be derived without guessing |
-| `VAR-PLAN-0003` | a manifest that cannot be parsed or is larger than the 8 MiB input cap, or uses an unsupported Ingress API version |
-| `VAR-PLAN-0004` | a wildcard host planned with the concrete label `varco-probe` |
+| `VAR-PLAN-0003` | a manifest that cannot be parsed, is larger than the 8 MiB input cap, uses an unsupported Ingress API version, has an annotation that is not a scalar, or yields a case with a control byte |
 | `VAR-PLAN-0005` | a rule without a host and no `--default-host` |
+| `VAR-PLAN-0008` | an Ingress or rule with no plannable HTTP path, or one that serves only `spec.defaultBackend` |
+
+## Warnings
+
+Warnings are the `warnings` array: conditions that qualify the cases.
+
+| Code | Meaning |
+|---|---|
+| `VAR-PLAN-0004` | a wildcard host planned with the concrete label `varco-probe` |
 | `VAR-PLAN-0006` | host-wide regex scope caused by `use-regex` or `rewrite-target` |
+| `VAR-PLAN-0007` | an annotation value is not a boolean, so varco treats it as unset |
+
+Cases are validated before they are emitted: a host, path or header value
+containing CR, LF or another control byte (or a path with a space or without a
+leading `/`) drops the case with a `VAR-PLAN-0003` finding instead of producing a
+malformed request.
 
 Annotations that are handled and therefore never reported: `use-regex`,
 `rewrite-target`, `ssl-redirect`, `force-ssl-redirect`, `enable-cors`,
 `cors-allow-headers`, `app-root`, `permanent-redirect`, `temporal-redirect`,
+`permanent-redirect-code`, `temporal-redirect-code`,
 `kubernetes.io/ingress.class`. Anything else under
 `nginx.ingress.kubernetes.io/` is reported as `VAR-PLAN-0001`. Recognized but
 not testable black-box are timeouts and body size (`proxy-*`), `upstream-vhost`,
@@ -131,3 +153,10 @@ never planned and never guessed.
 - No I/O and no clock inside `internal/ingress` and `internal/plan`; the CLI is
   the only place that reads files.
 - Unsupported work is always listed, never silently dropped.
+
+## Known limitations
+
+- `ssl-redirect` on a host without `spec.tls` plans an `http-redirect` case and cases that are still served with `scheme: http`, so some cases differ only by family and note.
+- YAML node nesting is depth-capped only for `kind: List`; a deeply nested flow document is not bounded further.
+- When `--ingress-class` excludes an Ingress, that resource is dropped without a finding, and regex scope is computed over the included resources only, so an excluded `use-regex` Ingress changes the host scope silently.
+- Not-testable annotation classification is name-based and is not reclassified per annotation.

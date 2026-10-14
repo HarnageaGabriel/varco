@@ -765,3 +765,310 @@ func TestMatchesClass(t *testing.T) {
 		t.Fatal("the legacy class annotation must match")
 	}
 }
+
+// TestBuildExactOnRegexHostIsPrefixLike covers accepted finding Major 2: an Exact
+// path on a host whose regex scope is active is compiled by ingress-nginx as a
+// prefix regex, so varco emits the subpath and prefix-boundary cases too
+// (blog behavior 2).
+func TestBuildExactOnRegexHostIsPrefixLike(t *testing.T) {
+	tests := []struct {
+		name         string
+		regexHost    bool
+		wantSub      bool
+		wantBoundary bool
+	}{
+		{name: "literal host stays literal", regexHost: false, wantSub: false, wantBoundary: false},
+		{name: "regex host makes Exact prefix-like", regexHost: true, wantSub: true, wantBoundary: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			exact := pathIngress("exact", "exact.example.com", "/header", "Exact", nil)
+			resources := []ingress.Ingress{exact}
+			if test.regexHost {
+				resources = append(resources, pathIngress("regex", "exact.example.com", "/api", "Prefix", map[string]string{annotationUseRegex: "true"}))
+			}
+			result := Build(resources, Options{})
+			byFamily := pathsByFamily(result)
+			gotSub := len(byFamily[FamilySubpath]) > 0
+			gotBoundary := len(byFamily[FamilyPrefixBoundary]) > 0
+			if gotSub != test.wantSub || gotBoundary != test.wantBoundary {
+				t.Fatalf("subpath=%v boundary=%v, want %v/%v", gotSub, gotBoundary, test.wantSub, test.wantBoundary)
+			}
+			sawRegexNote := false
+			for _, item := range result.Cases {
+				if item.Source.Ingress != "ns/exact" {
+					continue
+				}
+				if item.Family == FamilySubpath && strings.Contains(item.Note, "blog behavior 2") {
+					sawRegexNote = true
+				}
+			}
+			if test.regexHost && !sawRegexNote {
+				t.Fatalf("Exact subpath note does not cite blog behavior 2: %#v", result.Cases)
+			}
+		})
+	}
+}
+
+// TestBuildTrailingSlashNoteDirection covers accepted finding Major 2's note fix:
+// the trailing-slash case states the direction it probes.
+func TestBuildTrailingSlashNoteDirection(t *testing.T) {
+	tests := []struct {
+		name         string
+		path         string
+		wantContains string
+	}{
+		{name: "declared with a slash probes without it", path: "/api/", wantContains: "probes the same path without it"},
+		{name: "declared without a slash probes an extra slash", path: "/api", wantContains: "probes the same path with an extra slash"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result := Build([]ingress.Ingress{pathIngress("a", "a.example.com", test.path, "Prefix", nil)}, Options{})
+			found := false
+			for _, item := range result.Cases {
+				if item.Family != FamilyTrailingSlash {
+					continue
+				}
+				found = true
+				if !strings.Contains(item.Note, test.wantContains) || !strings.Contains(item.Note, "blog behavior 4") {
+					t.Fatalf("note = %q, want %q", item.Note, test.wantContains)
+				}
+			}
+			if !found {
+				t.Fatal("no trailing-slash case")
+			}
+		})
+	}
+}
+
+// TestBuildBooleanAnnotationParsing covers accepted finding Major 3: annotation
+// booleans use strconv.ParseBool semantics.
+func TestBuildBooleanAnnotationParsing(t *testing.T) {
+	for _, value := range []string{"1", "t", "T", "TRUE", "true", "True"} {
+		t.Run("true/"+value, func(t *testing.T) {
+			annotations := map[string]string{annotationUseRegex: value, annotationEnableCORS: value}
+			result := Build([]ingress.Ingress{pathIngress("bool", "bool.example.com", "/api", "Prefix", annotations)}, Options{})
+			if len(result.Warnings) != 1 || result.Warnings[0].Code != diag.CodePlanRegexHostWide {
+				t.Fatalf("warnings = %#v", result.Warnings)
+			}
+			if len(pathsByFamily(result)[FamilyCORSPreflight]) != 1 {
+				t.Fatalf("no cors-preflight for %q", value)
+			}
+		})
+	}
+	for _, value := range []string{"0", "f", "F", "FALSE", "false", "False"} {
+		t.Run("false/"+value, func(t *testing.T) {
+			resource := pathIngress("bool", "bool.example.com", "/api", "Prefix", map[string]string{annotationEnableCORS: value})
+			resource.TLS = []ingress.TLS{{Hosts: []string{"bool.example.com"}}}
+			result := Build([]ingress.Ingress{resource}, Options{})
+			if len(pathsByFamily(result)[FamilyCORSPreflight]) != 0 {
+				t.Fatalf("unexpected cors-preflight for %q", value)
+			}
+			if len(pathsByFamily(result)[FamilyHTTPRedirect]) == 0 {
+				t.Fatalf("enable-cors %q must not disable the TLS redirect", value)
+			}
+			if len(result.Warnings) != 0 {
+				t.Fatalf("warnings = %#v", result.Warnings)
+			}
+		})
+	}
+}
+
+// TestBuildUnparsableBooleanWarning covers accepted finding Major 3: an
+// unparsable boolean is unset and warned about with VAR-PLAN-0007.
+func TestBuildUnparsableBooleanWarning(t *testing.T) {
+	for _, name := range []string{annotationUseRegex, annotationSSLRedirect, annotationForceSSLRedirect, annotationEnableCORS} {
+		t.Run(name, func(t *testing.T) {
+			resource := pathIngress("bool", "bool.example.com", "/api", "Prefix", map[string]string{name: "yes"})
+			result := Build([]ingress.Ingress{resource}, Options{})
+			found := false
+			for _, warning := range result.Warnings {
+				if warning.Code == diag.CodePlanAnnotationBool && strings.Contains(warning.Message, "not a boolean") {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("warnings = %#v", result.Warnings)
+			}
+			if len(pathsByFamily(result)[FamilyCORSPreflight]) != 0 {
+				t.Fatal("an unparsable enable-cors must be unset")
+			}
+			for _, item := range result.Cases {
+				if item.Family == FamilyCaseFlip {
+					t.Fatal("an unparsable use-regex must be unset")
+				}
+			}
+		})
+	}
+}
+
+// TestBuildRejectsControlBytes covers accepted finding Minor 4: host, path and
+// header value control bytes drop the case with a VAR-PLAN-0003 finding.
+func TestBuildRejectsControlBytes(t *testing.T) {
+	tests := []struct {
+		name       string
+		resource   ingress.Ingress
+		wantFamily string
+	}{
+		{
+			name: "header value",
+			resource: pathIngress("cors", "cors.example.com", "/api", "Prefix", map[string]string{
+				annotationEnableCORS:       "true",
+				annotationCORSAllowHeaders: "X-Bad\r\nX-Injected: 1",
+			}),
+			wantFamily: FamilyCORSPreflight,
+		},
+		{
+			name:       "path control byte",
+			resource:   pathIngress("bad", "bad.example.com", "/a\nb", "Prefix", nil),
+			wantFamily: FamilyBase,
+		},
+		{
+			name:       "path space",
+			resource:   pathIngress("bad", "bad.example.com", "/a b", "Prefix", nil),
+			wantFamily: FamilyBase,
+		},
+		{
+			name:       "host control byte",
+			resource:   pathIngress("bad", "bad\n.example.com", "/a", "Prefix", nil),
+			wantFamily: FamilyBase,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result := Build([]ingress.Ingress{test.resource}, Options{})
+			sawFinding := false
+			for _, finding := range result.Unsupported {
+				if finding.Code == diag.CodePlanManifest && strings.Contains(finding.Message, "control character") {
+					sawFinding = true
+				}
+			}
+			if !sawFinding {
+				t.Fatalf("findings = %#v", result.Unsupported)
+			}
+			for _, item := range result.Cases {
+				if item.Family == test.wantFamily {
+					t.Fatalf("an invalid case was not dropped: %#v", item)
+				}
+			}
+		})
+	}
+}
+
+// TestBuildNoPlannablePathFinding covers accepted finding Minor 5: an Ingress or
+// rule with no plannable HTTP path yields a finding, never silence.
+func TestBuildNoPlannablePathFinding(t *testing.T) {
+	tests := []struct {
+		name     string
+		resource ingress.Ingress
+		wantCode diag.Code
+		wantMsg  string
+	}{
+		{
+			name:     "rule without http",
+			resource: ingress.Ingress{APIVersion: ingress.APIVersion, Kind: ingress.KindIngress, Namespace: "ns", Name: "tcp", Rules: []ingress.Rule{{Host: "tcp.example.com"}}},
+			wantCode: diag.CodePlanNoPath,
+			wantMsg:  "no HTTP path",
+		},
+		{
+			name:     "defaultBackend only",
+			resource: ingress.Ingress{APIVersion: ingress.APIVersion, Kind: ingress.KindIngress, Namespace: "ns", Name: "default", DefaultBackend: true},
+			wantCode: diag.CodePlanNoPath,
+			wantMsg:  "defaultBackend",
+		},
+		{
+			name:     "plannable path",
+			resource: pathIngress("ok", "ok.example.com", "/ok", "Prefix", nil),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result := Build([]ingress.Ingress{test.resource}, Options{})
+			if test.wantCode == "" {
+				if len(result.Unsupported) != 0 {
+					t.Fatalf("findings = %#v", result.Unsupported)
+				}
+				return
+			}
+			found := false
+			for _, finding := range result.Unsupported {
+				if finding.Code == test.wantCode && strings.Contains(finding.Message, test.wantMsg) {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("findings = %#v", result.Unsupported)
+			}
+		})
+	}
+}
+
+// TestBuildRedirectCodeAnnotations covers accepted finding Minor 6: the expected
+// redirect code is read from permanent-redirect-code/temporal-redirect-code and
+// recorded in the case note.
+func TestBuildRedirectCodeAnnotations(t *testing.T) {
+	tests := []struct {
+		name        string
+		annotations map[string]string
+		wantCode    string
+	}{
+		{name: "permanent default", annotations: map[string]string{annotationPermanentRedirect: "https://example.org"}, wantCode: "301"},
+		{name: "permanent override", annotations: map[string]string{annotationPermanentRedirect: "https://example.org", annotationPermanentRedirectCode: "308"}, wantCode: "308"},
+		{name: "temporal default", annotations: map[string]string{annotationTemporalRedirect: "https://example.org"}, wantCode: "302"},
+		{name: "temporal override", annotations: map[string]string{annotationTemporalRedirect: "https://example.org", annotationTemporalRedirectCode: "307"}, wantCode: "307"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result := Build([]ingress.Ingress{pathIngress("r", "r.example.com", "/r", "Prefix", test.annotations)}, Options{})
+			seen := false
+			for _, item := range result.Cases {
+				if item.Family != FamilyRedirectAnnotation {
+					continue
+				}
+				seen = true
+				if !strings.Contains(item.Note, "expected code "+test.wantCode) {
+					t.Fatalf("note = %q, want code %s", item.Note, test.wantCode)
+				}
+			}
+			if !seen {
+				t.Fatalf("no redirect-annotation case: %#v", result.Cases)
+			}
+			if len(result.Unsupported) != 0 {
+				t.Fatalf("findings = %#v", result.Unsupported)
+			}
+		})
+	}
+}
+
+// TestBuildCORSHeadersWithoutEnableCORS covers accepted finding Minor 7:
+// cors-allow-headers without enable-cors is reported instead of dropped.
+func TestBuildCORSHeadersWithoutEnableCORS(t *testing.T) {
+	tests := []struct {
+		name        string
+		annotations map[string]string
+		wantFinding bool
+		wantCase    bool
+	}{
+		{name: "no enable-cors", annotations: map[string]string{annotationCORSAllowHeaders: "X-Request-Id"}, wantFinding: true},
+		{name: "enable-cors false", annotations: map[string]string{annotationCORSAllowHeaders: "X-Request-Id", annotationEnableCORS: "false"}, wantFinding: true},
+		{name: "enable-cors true", annotations: map[string]string{annotationCORSAllowHeaders: "X-Request-Id", annotationEnableCORS: "true"}, wantCase: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result := Build([]ingress.Ingress{pathIngress("cors", "cors.example.com", "/api", "Prefix", test.annotations)}, Options{})
+			sawFinding := false
+			for _, finding := range result.Unsupported {
+				if finding.Annotation == annotationCORSAllowHeaders {
+					sawFinding = true
+				}
+			}
+			if sawFinding != test.wantFinding {
+				t.Fatalf("finding = %v, want %v (%#v)", sawFinding, test.wantFinding, result.Unsupported)
+			}
+			gotCase := len(pathsByFamily(result)[FamilyCORSPreflight]) > 0
+			if gotCase != test.wantCase {
+				t.Fatalf("cors-preflight = %v, want %v", gotCase, test.wantCase)
+			}
+		})
+	}
+}

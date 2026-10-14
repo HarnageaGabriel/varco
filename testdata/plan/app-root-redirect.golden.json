@@ -30,7 +30,7 @@
       }
     },
     {
-      "id": "abd568c2280c",
+      "id": "6ffd648e1bfa",
       "host": "www.example.org",
       "scheme": "http",
       "method": "GET",
@@ -42,7 +42,7 @@
         "path": 1,
         "annotation": "nginx.ingress.kubernetes.io/permanent-redirect"
       },
-      "note": "permanent-redirect answers with a redirect"
+      "note": "permanent-redirect answers with a redirect (expected code 301)"
     },
     {
       "id": "26d33dc2ce23",
@@ -87,7 +87,7 @@
       "note": "pathType ImplementationSpecific is treated as a Prefix-like match"
     },
     {
-      "id": "2875d8f6ba7a",
+      "id": "a0f86af7104b",
       "host": "www.example.org",
       "scheme": "http",
       "method": "GET",
@@ -99,10 +99,10 @@
         "path": 0,
         "annotation": "nginx.ingress.kubernetes.io/permanent-redirect"
       },
-      "note": "permanent-redirect answers with a redirect; pathType ImplementationSpecific is treated as a Prefix-like match"
+      "note": "permanent-redirect answers with a redirect (expected code 301); pathType ImplementationSpecific is treated as a Prefix-like match"
     },
     {
-      "id": "fda42eb703a2",
+      "id": "ff62ad603a38",
       "host": "www.example.org",
       "scheme": "http",
       "method": "GET",
@@ -113,7 +113,7 @@
         "rule": 0,
         "path": 0
       },
-      "note": "ingress-nginx answers a missing trailing slash with 301 (blog behavior 4); pathType ImplementationSpecific is treated as a Prefix-like match"
+      "note": "declared without a trailing slash; probes the same path with an extra slash (blog behavior 4); probes slash handling, expected behavior unverified (VERIFY); pathType ImplementationSpecific is treated as a Prefix-like match"
     },
     {
       "id": "6a04a66e3c22",
