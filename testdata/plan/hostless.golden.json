@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "cases": [],
+  "unsupported": [
+    {
+      "code": "VAR-PLAN-0005",
+      "ingress": "dev/internal",
+      "message": "rule has no host and no --default-host was given; no case can be planned for it"
+    }
+  ],
+  "warnings": []
+}

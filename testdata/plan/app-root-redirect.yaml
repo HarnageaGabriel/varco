@@ -1,0 +1,32 @@
+# Source: https://kubernetes.io/blog/2026/02/27/ingress-nginx-before-you-migrate
+# Anonymized marketing site: app-root and permanent-redirect annotations, and an
+# ImplementationSpecific path type with a literal path.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: web
+  name: marketing
+  annotations:
+    nginx.ingress.kubernetes.io/app-root: /home
+    nginx.ingress.kubernetes.io/permanent-redirect: https://www.example.org$request_uri
+    nginx.ingress.kubernetes.io/whitelist-source-range: 10.0.0.0/8
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: www.example.org
+      http:
+        paths:
+          - path: /landing
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: marketing
+                port:
+                  number: 80
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: marketing
+                port:
+                  number: 80

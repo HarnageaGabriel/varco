@@ -1,0 +1,179 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "7bb49e56aac7",
+      "host": "status.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "//status",
+      "family": "double-slash",
+      "source": {
+        "ingress": "ops/status-page",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "repeated slashes are normalized or answered with 301 (blog behavior 5)"
+    },
+    {
+      "id": "97d78f25f10b",
+      "host": "status.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "//status",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "ops/status-page",
+        "rule": 0,
+        "path": 0,
+        "annotation": "nginx.ingress.kubernetes.io/force-ssl-redirect"
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "0124237301ec",
+      "host": "status.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/status",
+      "family": "base",
+      "source": {
+        "ingress": "ops/status-page",
+        "rule": 0,
+        "path": 0
+      }
+    },
+    {
+      "id": "9aec2eec7167",
+      "host": "status.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/status",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "ops/status-page",
+        "rule": 0,
+        "path": 0,
+        "annotation": "nginx.ingress.kubernetes.io/force-ssl-redirect"
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "596481c9b632",
+      "host": "status.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/status/",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "ops/status-page",
+        "rule": 0,
+        "path": 0,
+        "annotation": "nginx.ingress.kubernetes.io/force-ssl-redirect"
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "72e2faab6a7f",
+      "host": "status.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/status/",
+      "family": "trailing-slash",
+      "source": {
+        "ingress": "ops/status-page",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "declared without a trailing slash; probes the same path with an extra slash (blog behavior 4); probes slash handling, expected behavior unverified (VERIFY)"
+    },
+    {
+      "id": "86c27e7faa98",
+      "host": "status.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/status/varco-probe",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "ops/status-page",
+        "rule": 0,
+        "path": 0,
+        "annotation": "nginx.ingress.kubernetes.io/force-ssl-redirect"
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "43c69bb6356f",
+      "host": "status.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/status/varco-probe",
+      "family": "subpath",
+      "source": {
+        "ingress": "ops/status-page",
+        "rule": 0,
+        "path": 0
+      }
+    },
+    {
+      "id": "2e95a7c6407b",
+      "host": "status.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/statusvarco",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "ops/status-page",
+        "rule": 0,
+        "path": 0,
+        "annotation": "nginx.ingress.kubernetes.io/force-ssl-redirect"
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "454ec72e2ddc",
+      "host": "status.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/statusvarco",
+      "family": "prefix-boundary",
+      "source": {
+        "ingress": "ops/status-page",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "Prefix matches by path element, so /api must not match /apivarco (blog behavior 1)"
+    },
+    {
+      "id": "a629237a7dc6",
+      "host": "status.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco/../status",
+      "family": "dot-segments",
+      "source": {
+        "ingress": "ops/status-page",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "dot segments are resolved before matching (blog behavior 5)"
+    },
+    {
+      "id": "5c6cd6da0a6d",
+      "host": "status.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco/../status",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "ops/status-page",
+        "rule": 0,
+        "path": 0,
+        "annotation": "nginx.ingress.kubernetes.io/force-ssl-redirect"
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    }
+  ],
+  "unsupported": [],
+  "warnings": []
+}

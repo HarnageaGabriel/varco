@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "e649bc11988c",
+      "host": "varco-probe.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/",
+      "family": "base",
+      "source": {
+        "ingress": "edge/wildcard",
+        "rule": 0,
+        "path": 0
+      }
+    },
+    {
+      "id": "79cb137a0a54",
+      "host": "varco-probe.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "//",
+      "family": "double-slash",
+      "source": {
+        "ingress": "edge/wildcard",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "repeated slashes are normalized or answered with 301 (blog behavior 5)"
+    },
+    {
+      "id": "33fa4d154994",
+      "host": "varco-probe.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco-probe",
+      "family": "subpath",
+      "source": {
+        "ingress": "edge/wildcard",
+        "rule": 0,
+        "path": 0
+      }
+    },
+    {
+      "id": "9d2c066c04a9",
+      "host": "varco-probe.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco/../",
+      "family": "dot-segments",
+      "source": {
+        "ingress": "edge/wildcard",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "dot segments are resolved before matching (blog behavior 5)"
+    }
+  ],
+  "unsupported": [
+    {
+      "code": "VAR-PLAN-0001",
+      "ingress": "edge/wildcard",
+      "annotation": "nginx.ingress.kubernetes.io/canary",
+      "message": "annotation nginx.ingress.kubernetes.io/canary cannot be tested black-box by varco"
+    },
+    {
+      "code": "VAR-PLAN-0001",
+      "ingress": "edge/wildcard",
+      "annotation": "nginx.ingress.kubernetes.io/canary-weight",
+      "message": "annotation nginx.ingress.kubernetes.io/canary-weight cannot be tested black-box by varco"
+    },
+    {
+      "code": "VAR-PLAN-0001",
+      "ingress": "edge/wildcard",
+      "annotation": "nginx.ingress.kubernetes.io/proxy-read-timeout",
+      "message": "annotation nginx.ingress.kubernetes.io/proxy-read-timeout cannot be tested black-box by varco"
+    },
+    {
+      "code": "VAR-PLAN-0001",
+      "ingress": "edge/wildcard",
+      "annotation": "nginx.ingress.kubernetes.io/shield-routing",
+      "message": "annotation nginx.ingress.kubernetes.io/shield-routing is unknown to varco; no case is generated from it"
+    },
+    {
+      "code": "VAR-PLAN-0002",
+      "ingress": "edge/tricky-regex",
+      "path": "/v[0-9]{1,3}/items/(.*)",
+      "message": "cannot derive a sample request path from regex \"/v[0-9]{1,3}/items/(.*)\"; varco never guesses a matching path"
+    },
+    {
+      "code": "VAR-PLAN-0005",
+      "ingress": "edge/wildcard",
+      "message": "rule has no host and no --default-host was given; no case can be planned for it"
+    }
+  ],
+  "warnings": [
+    {
+      "code": "VAR-PLAN-0004",
+      "ingress": "edge/wildcard",
+      "message": "wildcard host \"*.example.com\" is planned as \"varco-probe.example.com\""
+    }
+  ]
+}

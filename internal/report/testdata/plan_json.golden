@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "0123456789ab",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/health",
+      "family": "base",
+      "source": {
+        "ingress": "prod/checkout",
+        "rule": 0,
+        "path": 1
+      }
+    },
+    {
+      "id": "cdef01234567",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "OPTIONS",
+      "path": "/health",
+      "headers": [
+        {
+          "name": "Access-Control-Request-Method",
+          "values": [
+            "GET"
+          ]
+        },
+        {
+          "name": "Origin",
+          "values": [
+            "https://varco.invalid"
+          ]
+        }
+      ],
+      "family": "cors-preflight",
+      "source": {
+        "ingress": "prod/checkout",
+        "rule": 0,
+        "path": 1,
+        "annotation": "nginx.ingress.kubernetes.io/enable-cors"
+      },
+      "note": "enable-cors answers an OPTIONS preflight"
+    }
+  ],
+  "unsupported": [
+    {
+      "code": "VAR-PLAN-0001",
+      "ingress": "prod/checkout",
+      "annotation": "nginx.ingress.kubernetes.io/proxy-body-size",
+      "message": "annotation nginx.ingress.kubernetes.io/proxy-body-size cannot be tested black-box by varco"
+    },
+    {
+      "code": "VAR-PLAN-0002",
+      "ingress": "prod/checkout",
+      "path": "/api/v[0-9]+",
+      "message": "cannot derive a sample request path from regex \"/api/v[0-9]+\"; varco never guesses a matching path"
+    },
+    {
+      "code": "VAR-PLAN-0005",
+      "ingress": "prod/checkout",
+      "message": "rule has no host and no --default-host was given; no case can be planned for it"
+    }
+  ],
+  "warnings": [
+    {
+      "code": "VAR-PLAN-0004",
+      "ingress": "prod/checkout",
+      "message": "wildcard host \"*.example.com\" is planned as \"varco-probe.example.com\""
+    }
+  ]
+}

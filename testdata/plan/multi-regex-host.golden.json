@@ -1,0 +1,632 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "69666e926102",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "//api/v1/items/varco-probe",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 0,
+        "annotation": "nginx.ingress.kubernetes.io/ssl-redirect"
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "8452d460a17e",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "//api/v1/items/varco-probe",
+      "family": "double-slash",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "repeated slashes are normalized or answered with 301 (blog behavior 5); pathType ImplementationSpecific is treated as a Prefix-like match; path \"/api/v1/items(/|$)(.*)\" is a regex and is sampled as \"/api/v1/items/varco-probe\""
+    },
+    {
+      "id": "f435d3a66f6c",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "//header",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "99f76c122a78",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "//header",
+      "family": "double-slash",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "repeated slashes are normalized or answered with 301 (blog behavior 5); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
+    },
+    {
+      "id": "d7deb8a81a38",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "//health",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 1,
+        "annotation": "nginx.ingress.kubernetes.io/ssl-redirect"
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "6d2df0697cf9",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "//health",
+      "family": "double-slash",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "repeated slashes are normalized or answered with 301 (blog behavior 5); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
+    },
+    {
+      "id": "c20f2c6f060c",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "//legacy",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "87c71e0f737d",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "//legacy",
+      "family": "double-slash",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "repeated slashes are normalized or answered with 301 (blog behavior 5); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2); path \"^/legacy\" is a regex and is sampled as \"/legacy\""
+    },
+    {
+      "id": "0aa215d8e69b",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/API/V1/ITEMS/VARCO-PROBE",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 0,
+        "annotation": "nginx.ingress.kubernetes.io/ssl-redirect"
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "b0d8e33aee71",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/API/V1/ITEMS/VARCO-PROBE",
+      "family": "case-flip",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "use-regex or rewrite-target makes matching case-insensitive (blog behaviors 1 to 3); pathType ImplementationSpecific is treated as a Prefix-like match; path \"/api/v1/items(/|$)(.*)\" is a regex and is sampled as \"/api/v1/items/varco-probe\""
+    },
+    {
+      "id": "212ac512e9a3",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/HEADER",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "d2293f9cc94f",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/HEADER",
+      "family": "case-flip",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "another Ingress of this host enables regex matching, which is host-wide (blog behavior 2); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
+    },
+    {
+      "id": "ebbacf5d13ca",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/HEALTH",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 1,
+        "annotation": "nginx.ingress.kubernetes.io/ssl-redirect"
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "88443c4c856c",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/HEALTH",
+      "family": "case-flip",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "use-regex or rewrite-target makes matching case-insensitive (blog behaviors 1 to 3); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
+    },
+    {
+      "id": "185912daaff2",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/LEGACY",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "787837b80263",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/LEGACY",
+      "family": "case-flip",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the path looks like a regex, so matching may be case-insensitive (blog behaviors 1 to 3); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2); path \"^/legacy\" is a regex and is sampled as \"/legacy\""
+    },
+    {
+      "id": "d94270638da3",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/api/v1/items/varco-probe",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 0,
+        "annotation": "nginx.ingress.kubernetes.io/ssl-redirect"
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "5e53f811fd32",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/api/v1/items/varco-probe",
+      "family": "base",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "pathType ImplementationSpecific is treated as a Prefix-like match; path \"/api/v1/items(/|$)(.*)\" is a regex and is sampled as \"/api/v1/items/varco-probe\""
+    },
+    {
+      "id": "2154dab9afba",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/header",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "a9e9595df1f1",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/header",
+      "family": "base",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
+    },
+    {
+      "id": "bfb60f8c176d",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/header/",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "6cdb25ce3e1e",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/header/",
+      "family": "trailing-slash",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "declared without a trailing slash; probes the same path with an extra slash (blog behavior 4); probes slash handling, expected behavior unverified (VERIFY); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
+    },
+    {
+      "id": "89e604eaf008",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/header/varco-probe",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "068fe4ecf292",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/header/varco-probe",
+      "family": "subpath",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
+    },
+    {
+      "id": "91495db5ff61",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/headervarco",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "518ab8567365",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/headervarco",
+      "family": "prefix-boundary",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "with use-regex the path is matched as a prefix regex, so /api may match /apivarco (blog behavior 1); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
+    },
+    {
+      "id": "62d9fe3e821a",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/health",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 1,
+        "annotation": "nginx.ingress.kubernetes.io/ssl-redirect"
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "5cf443c95a35",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/health",
+      "family": "base",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
+    },
+    {
+      "id": "738b352b2515",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/health/varco-probe",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 1,
+        "annotation": "nginx.ingress.kubernetes.io/ssl-redirect"
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "fcdf6dc34c02",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/health/varco-probe",
+      "family": "subpath",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
+    },
+    {
+      "id": "1c0407efd271",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/healthvarco",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 1,
+        "annotation": "nginx.ingress.kubernetes.io/ssl-redirect"
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "ccab8b49acb8",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/healthvarco",
+      "family": "prefix-boundary",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "with use-regex the path is matched as a prefix regex, so /api may match /apivarco (blog behavior 1); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
+    },
+    {
+      "id": "f06f2ffc70d6",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/legacy",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "723aee3da215",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/legacy",
+      "family": "base",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2); path \"^/legacy\" is a regex and is sampled as \"/legacy\""
+    },
+    {
+      "id": "a088f7945713",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco/../api/v1/items/varco-probe",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 0,
+        "annotation": "nginx.ingress.kubernetes.io/ssl-redirect"
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "d84997b72312",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/varco/../api/v1/items/varco-probe",
+      "family": "dot-segments",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "dot segments are resolved before matching (blog behavior 5); pathType ImplementationSpecific is treated as a Prefix-like match; path \"/api/v1/items(/|$)(.*)\" is a regex and is sampled as \"/api/v1/items/varco-probe\""
+    },
+    {
+      "id": "754fc53db555",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco/../header",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "1843a7c57c36",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/varco/../header",
+      "family": "dot-segments",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "dot segments are resolved before matching (blog behavior 5); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
+    },
+    {
+      "id": "45255e447077",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco/../health",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 1,
+        "annotation": "nginx.ingress.kubernetes.io/ssl-redirect"
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "e2b0ca363326",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/varco/../health",
+      "family": "dot-segments",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "dot segments are resolved before matching (blog behavior 5); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)"
+    },
+    {
+      "id": "a7131812432d",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco/../legacy",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "d016c99a6ffc",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/varco/../legacy",
+      "family": "dot-segments",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "dot segments are resolved before matching (blog behavior 5); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2); path \"^/legacy\" is a regex and is sampled as \"/legacy\""
+    }
+  ],
+  "unsupported": [],
+  "warnings": [
+    {
+      "code": "VAR-PLAN-0006",
+      "ingress": "prod/checkout-api",
+      "message": "use-regex or rewrite-target on prod/checkout-api makes ingress-nginx match every path of host api.example.com as a case-insensitive regex"
+    }
+  ]
+}

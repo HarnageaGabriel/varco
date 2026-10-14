@@ -1,0 +1,16 @@
+# Rejected input: extensions/v1beta1 has no pathType and different semantics, so
+# varco refuses to plan it (VAR-PLAN-0003) instead of guessing.
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  namespace: legacy
+  name: old-api
+spec:
+  rules:
+    - host: legacy.example.com
+      http:
+        paths:
+          - path: /old
+            backend:
+              serviceName: legacy
+              servicePort: 80

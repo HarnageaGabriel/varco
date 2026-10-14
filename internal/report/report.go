@@ -1,4 +1,4 @@
-// Package report renders deterministic comparison output.
+// Package report renders deterministic plan and comparison output.
 package report
 
 import (

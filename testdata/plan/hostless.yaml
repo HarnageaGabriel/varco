@@ -1,0 +1,24 @@
+# Input used with --default-host: a rule without a host and a legacy class
+# annotation, so the CLI flag behaviour can be asserted.
+# Source: https://kubernetes.io/blog/2026/02/27/ingress-nginx-before-you-migrate
+# (a rule without a host cannot be derived from the manifest alone; see
+# docs/adr/0005-plan-case-families.md).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: dev
+  name: internal
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /internal
+            pathType: Prefix
+            backend:
+              service:
+                name: internal
+                port:
+                  number: 80
+
