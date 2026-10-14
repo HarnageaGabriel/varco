@@ -96,12 +96,21 @@ type Difference struct {
 	ExceptionID string    `json:"exception_id,omitempty"`
 }
 
+// Explanation is a known migration behavior that can explain a difference.
+type Explanation struct {
+	ID      string `json:"id"`
+	Summary string `json:"summary"`
+	Fix     string `json:"fix"`
+	Source  string `json:"source"`
+}
+
 // Evaluation is the complete result of one executed case.
 type Evaluation struct {
-	CaseID      string       `json:"case_id"`
-	Outcome     Outcome      `json:"outcome"`
-	Differences []Difference `json:"differences"`
-	Error       string       `json:"error,omitempty"`
+	CaseID       string        `json:"case_id"`
+	Outcome      Outcome       `json:"outcome"`
+	Differences  []Difference  `json:"differences"`
+	Explanations []Explanation `json:"explanations,omitempty"`
+	Error        string        `json:"error,omitempty"`
 
 	// Host, Method, Path and Family identify the case in table output. The JSON
 	// report keeps identifying a case by its id (the plan carries the request

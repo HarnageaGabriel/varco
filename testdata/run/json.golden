@@ -80,6 +80,14 @@
           "new": "sha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb size=1234 truncated=false",
           "accepted": false
         }
+      ],
+      "explanations": [
+        {
+          "id": "nginx-regex-case-insensitive",
+          "summary": "ingress-nginx matches use-regex/rewrite-target paths case-insensitively; Gateway API matches are case-sensitive.",
+          "fix": "Use a RegularExpression match with (?i), or correct the path casing.",
+          "source": "https://kubernetes.io/blog/2026/02/27/ingress-nginx-before-you-migrate"
+        }
       ]
     },
     {

@@ -36,8 +36,14 @@ func runFixture() model.RunReport {
 				Host:    "api.example.com",
 				Method:  "GET",
 				Path:    "/cb",
-				Family:  "base",
+				Family:  "case-flip",
 				Outcome: model.OutcomeDifferent,
+				Explanations: []model.Explanation{{
+					ID:      "nginx-regex-case-insensitive",
+					Summary: "ingress-nginx matches use-regex/rewrite-target paths case-insensitively; Gateway API matches are case-sensitive.",
+					Fix:     "Use a RegularExpression match with (?i), or correct the path casing.",
+					Source:  "https://kubernetes.io/blog/2026/02/27/ingress-nginx-before-you-migrate",
+				}},
 				Differences: []model.Difference{
 					{Code: diag.CodeCompareStatus, Field: "status", Old: "200", New: "404"},
 					{Code: diag.CodeCompareLocation, Field: "header.location", Old: "https://api.example.com/cb?code=old-secret", New: "https://api.example.com/cb?code=new-secret"},
