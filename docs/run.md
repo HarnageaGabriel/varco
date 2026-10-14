@@ -176,7 +176,7 @@ trailer headers as `Trailer:<Name>`, `tls.version`, `certificate.<field>`
 | `unsupported_count`, `unsupported` | the plan's unsupported findings. |
 | `expired_exceptions` | ids of exceptions past their `expires` date. |
 | `ignored_fields` | fields left out of every comparison, reported so nothing is invisible. |
-| `cases` | one evaluation per case, in plan order: `case_id`, `outcome`, `differences`, `error`. |
+| `cases` | one evaluation per case, in plan order: `case_id`, `outcome`, `differences`, `explanations` when present, `error`. |
 | `redacted` | `true` unless `--show-sensitive`. |
 
 The last three fields are additive; `schema_version` stays `1`.
@@ -191,6 +191,11 @@ value. A case is reportable when it is not `EQUIVALENT` or when policy accepted
 all of its differences; accepted rows are marked
 `accepted (<exception id>): <reason>`.
 
+After a `DIFFERENT` case's difference rows, the table prints one indented line
+per explanation in the form `why: <summary>  fix: <fix>  see: <source>`. JSON
+uses the additive `explanations` array on that case, with `schema_version`
+unchanged.
+
 Skipped cases (a cancelled run, or one dropped by `--max-requests`) are
 `INCONCLUSIVE` with the error `cancelled` or `budget`. A probe failure on either
 endpoint is `INCONCLUSIVE` with `VAR-NET-0001`.
@@ -200,6 +205,22 @@ endpoint is `INCONCLUSIVE` with `VAR-NET-0001`.
 `EQUIVALENT` means equivalent on the covered cases. `planned` is the number of
 cases, `skipped` the cases a cancellation never ran, and
 `executed = planned - skipped`. Every report states what was not covered.
+
+### Explanations
+
+Explanations are deterministic and ordered; each applies only to a `DIFFERENT`
+case whose family and differing fields match the trigger.
+
+| Rule id | Trigger | Source |
+|---|---|---|
+| `nginx-regex-case-insensitive` | `case-flip` with a `status` difference. ingress-nginx matches `use-regex`/`rewrite-target` paths case-insensitively while Gateway API matching is case-sensitive. | [Before you migrate](https://kubernetes.io/blog/2026/02/27/ingress-nginx-before-you-migrate), behaviors 1–3 |
+| `nginx-regex-prefix-host-wide` | `prefix-boundary` or `subpath` with a `status` difference on a host with regex scope. ingress-nginx regex paths are prefix matches and `use-regex` is host-wide. | [Before you migrate](https://kubernetes.io/blog/2026/02/27/ingress-nginx-before-you-migrate), behaviors 1–2 |
+| `nginx-trailing-slash-redirect` | `trailing-slash` with a `status` difference where the old status is `301`; ingress-nginx redirects a missing trailing slash. | [Before you migrate](https://kubernetes.io/blog/2026/02/27/ingress-nginx-before-you-migrate), behavior 4 |
+| `nginx-url-normalization` | `dot-segments` or `double-slash` with a `status` or `header.location` difference; ingress-nginx normalizes dot-segments and repeated slashes before matching. VERIFY the new controller's Envoy Gateway ClientTrafficPolicy path-settings name. | [Before you migrate](https://kubernetes.io/blog/2026/02/27/ingress-nginx-before-you-migrate), behavior 5 |
+| `ingress2gateway-rewrite-target` | `rewrite` with a `body` difference; `rewrite-target` may translate differently and capture groups are not supported by ingress2gateway. | [ingress2gateway ingress-nginx provider notes](https://github.com/kubernetes-sigs/ingress2gateway/blob/main/pkg/i2gw/providers/ingressnginx/README.md) |
+| `nginx-http-redirect` | VERIFY: `http-redirect` with a `status` difference; configure an explicit HTTP-to-HTTPS redirect with the same code. VERIFY the ingress-nginx default status code (308 vs 301). | [ingress-nginx ConfigMap](https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/configmap/) |
+| `nginx-default-backend` | VERIFY: `default-backend` with a `status`, `body` or certificate difference; decide the new catch-all backend and certificate. | [ingress-nginx CLI arguments](https://kubernetes.github.io/ingress-nginx/user-guide/cli-arguments/) |
+| `ingress-nginx-cors-defaults` | VERIFY: `cors-preflight` with a `header.access-control-*` difference; configure allowed origins, methods, headers and max-age explicitly. | [ingress-nginx annotations](https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/annotations/) |
 
 ## Exit codes
 

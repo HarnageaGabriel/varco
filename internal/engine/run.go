@@ -15,6 +15,7 @@ import (
 	"github.com/HarnageaGabriel/varco/internal/compare"
 	"github.com/HarnageaGabriel/varco/internal/diag"
 	"github.com/HarnageaGabriel/varco/internal/endpoint"
+	"github.com/HarnageaGabriel/varco/internal/explain"
 	"github.com/HarnageaGabriel/varco/internal/model"
 	"github.com/HarnageaGabriel/varco/internal/plan"
 	"github.com/HarnageaGabriel/varco/internal/policy"
@@ -276,6 +277,9 @@ func runCase(ctx context.Context, item model.ProbeCase, config RunConfig, limite
 	differences := compare.Results(item.Path, observations[0][0], observations[1][0], nil, config.BodyPolicy)
 	evaluation := policy.Evaluate(item, differences, config.Exceptions, config.Now, unstable)
 	evaluation.Unstable = unstable
+	if evaluation.Outcome == model.OutcomeDifferent {
+		evaluation.Explanations = explain.Explain(evaluation, evaluation.Family)
+	}
 	return evaluation, nil
 }
 
