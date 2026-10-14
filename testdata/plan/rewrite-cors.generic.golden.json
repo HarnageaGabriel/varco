@@ -1,0 +1,179 @@
+{
+  "schema_version": 1,
+  "profile": "generic",
+  "cases": [
+    {
+      "id": "be3b08359377",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "//cart",
+      "family": "double-slash",
+      "source": {
+        "ingress": "shop/catalog",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "repeated slashes are normalized or answered with 301 (blog behavior 5)"
+    },
+    {
+      "id": "778a16a1c4af",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "//catalog(/|$)(.*)",
+      "family": "double-slash",
+      "source": {
+        "ingress": "shop/catalog",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "repeated slashes are normalized or answered with 301 (blog behavior 5)"
+    },
+    {
+      "id": "6888e322ab52",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/cart",
+      "family": "base",
+      "source": {
+        "ingress": "shop/catalog",
+        "rule": 0,
+        "path": 1
+      }
+    },
+    {
+      "id": "49043b6241de",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/cart/",
+      "family": "trailing-slash",
+      "source": {
+        "ingress": "shop/catalog",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "declared without a trailing slash; probes the same path with an extra slash"
+    },
+    {
+      "id": "cea06de00b6a",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/cart/varco-probe",
+      "family": "subpath",
+      "source": {
+        "ingress": "shop/catalog",
+        "rule": 0,
+        "path": 1
+      }
+    },
+    {
+      "id": "74a1270d9fc2",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/cartvarco",
+      "family": "prefix-boundary",
+      "source": {
+        "ingress": "shop/catalog",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "Prefix matches by path element, so /api must not match /apivarco (Kubernetes Prefix semantics)"
+    },
+    {
+      "id": "bd6ad4252aec",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/catalog(/|$)(.*)",
+      "family": "base",
+      "source": {
+        "ingress": "shop/catalog",
+        "rule": 0,
+        "path": 0
+      }
+    },
+    {
+      "id": "fd2e240f7670",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/catalog(/|$)(.*)/",
+      "family": "trailing-slash",
+      "source": {
+        "ingress": "shop/catalog",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "declared without a trailing slash; probes the same path with an extra slash"
+    },
+    {
+      "id": "185e94eda35b",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco-unmatched-route",
+      "family": "unmatched-route",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the host declares no Prefix or ImplementationSpecific / path, so an unknown path exercises the default backend"
+    },
+    {
+      "id": "38f49b17d954",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco/../cart",
+      "family": "dot-segments",
+      "source": {
+        "ingress": "shop/catalog",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "dot segments are resolved before matching (blog behavior 5)"
+    },
+    {
+      "id": "76190e0bb337",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco/../catalog(/|$)(.*)",
+      "family": "dot-segments",
+      "source": {
+        "ingress": "shop/catalog",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "dot segments are resolved before matching (blog behavior 5)"
+    },
+    {
+      "id": "97693a99585f",
+      "host": "varco-unknown.invalid",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/",
+      "family": "default-backend",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "an unknown host exercises the default backend and, over HTTPS, the default certificate"
+    }
+  ],
+  "unsupported": [],
+  "warnings": [
+    {
+      "code": "VAR-PLAN-0009",
+      "ingress": "shop/catalog",
+      "message": "5 annotations ignored by the generic profile"
+    }
+  ]
+}

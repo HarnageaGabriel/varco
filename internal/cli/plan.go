@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -29,11 +30,15 @@ func runPlan(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	format := flags.String("format", "table", "table or json")
 	ingressClass := flags.String("ingress-class", "", "plan only Ingress resources of this class")
 	defaultHost := flags.String("default-host", "", "host for rules that declare none")
+	profile := flags.String("profile", plan.ProfileNginx, "nginx or generic")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}
 		return 2
+	}
+	if !validProfile(*profile) {
+		return configFailure(stderr, "--profile must be nginx or generic")
 	}
 	if flags.NArg() != 0 {
 		return configFailure(stderr, "plan takes no positional arguments; pass manifests with -f")
@@ -52,10 +57,10 @@ func runPlan(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if code != 0 {
 		return code
 	}
-	result := plan.Build(resources, plan.Options{IngressClass: *ingressClass, DefaultHost: *defaultHost})
+	result := plan.Build(resources, plan.Options{IngressClass: *ingressClass, DefaultHost: *defaultHost, Profile: *profile})
 	var err error
 	if *format == "json" {
-		err = report.PlanJSON(stdout, result)
+		err = writePlanJSON(stdout, result)
 	} else {
 		err = report.PlanTable(stdout, result)
 	}
@@ -67,6 +72,41 @@ func runPlan(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 }
 
 // expandInputs turns -f values into a sorted, de-duplicated list of manifest
+
+func validProfile(value string) bool {
+	return value == plan.ProfileNginx || value == plan.ProfileGeneric
+}
+
+// writePlanJSON adds the additive top-level profile while preserving schema
+// version 1 and the stable field order of the plan envelope.
+func writePlanJSON(writer io.Writer, result plan.Plan) error {
+	document := struct {
+		SchemaVersion int            `json:"schema_version"`
+		Profile       string         `json:"profile"`
+		Cases         []plan.Case    `json:"cases"`
+		Unsupported   []plan.Finding `json:"unsupported"`
+		Warnings      []plan.Warning `json:"warnings"`
+	}{
+		SchemaVersion: 1,
+		Profile:       result.Profile,
+		Cases:         result.Cases,
+		Unsupported:   result.Unsupported,
+		Warnings:      result.Warnings,
+	}
+	if document.Cases == nil {
+		document.Cases = []plan.Case{}
+	}
+	if document.Unsupported == nil {
+		document.Unsupported = []plan.Finding{}
+	}
+	if document.Warnings == nil {
+		document.Warnings = []plan.Warning{}
+	}
+	encoder := json.NewEncoder(writer)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(document)
+}
+
 // files. Directories are walked recursively and only *.yaml, *.yml and *.json
 // regular files are collected, so the plan never depends on directory order.
 func expandInputs(inputs []string, stderr io.Writer) ([]string, int) {

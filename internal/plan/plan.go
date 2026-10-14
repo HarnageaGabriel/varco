@@ -69,6 +69,7 @@ type Warning struct {
 // Plan is the complete result: the cases to run, what could not be planned,
 // and the warnings that qualify the cases.
 type Plan struct {
+	Profile     string
 	Cases       []Case
 	Unsupported []Finding
 	Warnings    []Warning
@@ -80,6 +81,8 @@ type Options struct {
 	IngressClass string
 	// DefaultHost is used for rules that declare no host; empty leaves them unplanned.
 	DefaultHost string
+	// Profile selects the planner behavior: nginx (default) or generic.
+	Profile string
 }
 
 // Build derives cases and findings from parsed Ingress resources. Resources are
@@ -94,6 +97,7 @@ func Build(resources []ingress.Ingress, options Options) Plan {
 // list so no output order can depend on map iteration.
 func (p Plan) finalize() Plan {
 	return Plan{
+		Profile:     p.Profile,
 		Cases:       finalizeCases(p.Cases),
 		Unsupported: finalizeFindings(p.Unsupported),
 		Warnings:    finalizeWarnings(p.Warnings),
