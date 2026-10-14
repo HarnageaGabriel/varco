@@ -1,5 +1,6 @@
 {
   "schema_version": 1,
+  "profile": "nginx",
   "cases": [
     {
       "id": "ca75167f2e3b",

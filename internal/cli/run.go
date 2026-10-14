@@ -35,6 +35,7 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	flags.Var(&inputs, "f", "Ingress manifest file, directory, or - for stdin (repeatable)")
 	ingressClass := flags.String("ingress-class", "", "plan only Ingress resources of this class")
 	defaultHost := flags.String("default-host", "", "host for rules that declare none")
+	profile := flags.String("profile", plan.ProfileNginx, "nginx or generic")
 	oldValue := flags.String("old", "", "old endpoint IP (port 80 for http, 443 for https)")
 	newValue := flags.String("new", "", "new endpoint IP (port 80 for http, 443 for https)")
 	oldHTTP := flags.String("old-http", "", "old endpoint for http cases (IP:port)")
@@ -62,6 +63,9 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			return 0
 		}
 		return 2
+	}
+	if !validProfile(*profile) {
+		return configFailure(stderr, "--profile must be nginx or generic")
 	}
 	if flags.NArg() != 0 {
 		return configFailure(stderr, "run takes no positional arguments")
@@ -110,7 +114,7 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if code != 0 {
 		return code
 	}
-	manifest, code := loadRunPlan(*planPath, inputs, stdin, plan.Options{IngressClass: *ingressClass, DefaultHost: *defaultHost}, stderr)
+	manifest, code := loadRunPlan(*planPath, inputs, stdin, plan.Options{IngressClass: *ingressClass, DefaultHost: *defaultHost, Profile: *profile}, stderr)
 	if code != 0 {
 		return code
 	}
@@ -219,14 +223,20 @@ func loadRunPlan(planPath string, inputs stringsFlag, stdin io.Reader, options p
 		if err != nil {
 			return plan.Plan{}, configFailure(stderr, fmt.Sprintf("cannot read plan: %v", err))
 		}
-		var document report.PlanDocument
+		var document struct {
+			SchemaVersion int            `json:"schema_version"`
+			Profile       string         `json:"profile"`
+			Cases         []plan.Case    `json:"cases"`
+			Unsupported   []plan.Finding `json:"unsupported"`
+			Warnings      []plan.Warning `json:"warnings"`
+		}
 		if err := json.Unmarshal(content, &document); err != nil {
 			return plan.Plan{}, configFailure(stderr, fmt.Sprintf("cannot parse plan JSON: %v", err))
 		}
 		if document.SchemaVersion != 1 {
 			return plan.Plan{}, configFailure(stderr, fmt.Sprintf("unsupported plan schema_version %d (want 1)", document.SchemaVersion))
 		}
-		return plan.Plan{Cases: document.Cases, Unsupported: document.Unsupported, Warnings: document.Warnings}, 0
+		return plan.Plan{Profile: document.Profile, Cases: document.Cases, Unsupported: document.Unsupported, Warnings: document.Warnings}, 0
 	}
 	paths, code := expandInputs(inputs, stderr)
 	if code != 0 {

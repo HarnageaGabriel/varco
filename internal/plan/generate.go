@@ -2,10 +2,7 @@ package plan
 
 import (
 	"fmt"
-	"sort"
-	"strconv"
 	"strings"
-	"unicode"
 
 	"github.com/HarnageaGabriel/varco/internal/diag"
 	"github.com/HarnageaGabriel/varco/internal/ingress"
@@ -17,6 +14,14 @@ const (
 	SchemeHTTP = "http"
 	// SchemeHTTPS is the TLS scheme, used for hosts with spec.tls or ssl-redirect.
 	SchemeHTTPS = "https"
+)
+
+// Planner profiles.
+const (
+	// ProfileNginx keeps the ingress-nginx-specific planner behavior.
+	ProfileNginx = "nginx"
+	// ProfileGeneric plans only behavior shared by HTTP proxies.
+	ProfileGeneric = "generic"
 )
 
 // HTTP methods used by cases. varco plans safe methods only.
@@ -68,22 +73,6 @@ const (
 // spec.ingressClassName.
 const AnnotationIngressClass = "kubernetes.io/ingress.class"
 
-const (
-	annotationPrefix = "nginx.ingress.kubernetes.io/"
-
-	annotationUseRegex              = annotationPrefix + "use-regex"
-	annotationRewriteTarget         = annotationPrefix + "rewrite-target"
-	annotationSSLRedirect           = annotationPrefix + "ssl-redirect"
-	annotationForceSSLRedirect      = annotationPrefix + "force-ssl-redirect"
-	annotationEnableCORS            = annotationPrefix + "enable-cors"
-	annotationCORSAllowHeaders      = annotationPrefix + "cors-allow-headers"
-	annotationAppRoot               = annotationPrefix + "app-root"
-	annotationPermanentRedirect     = annotationPrefix + "permanent-redirect"
-	annotationTemporalRedirect      = annotationPrefix + "temporal-redirect"
-	annotationPermanentRedirectCode = annotationPrefix + "permanent-redirect-code"
-	annotationTemporalRedirectCode  = annotationPrefix + "temporal-redirect-code"
-)
-
 // wildcardProbeHost replaces the leading "*" of a wildcard rule host.
 const wildcardProbeHost = "varco-probe"
 
@@ -101,13 +90,10 @@ const unmatchedRoutePath = "/varco-unmatched-route"
 // than from one Ingress resource.
 const syntheticIngress = "varco"
 
-// regexMeta are the characters that make ingress-nginx match a path as a
-// regular expression. A dot is deliberately absent: /v1.0 is a common literal.
-const regexMeta = "^$()[]{}*+?|\\"
-
 // builder accumulates cases, findings, and warnings while planning.
 type builder struct {
 	options    Options
+	profile    profileBehavior
 	plan       Plan
 	included   []ingress.Ingress
 	hosts      [][]resolvedRule
@@ -131,8 +117,102 @@ type requested struct {
 	note       string
 }
 
+// profileBehavior isolates controller-specific planning from the generic HTTP
+// case core. The generic profile leaves controller-only fields empty.
+type profileBehavior interface {
+	prepareHost(host string, resource ingress.Ingress, builder *builder)
+	prepareResource(index int, resource ingress.Ingress, builder *builder)
+	preparePath(resource ingress.Ingress, path ingress.Path, hostRegex bool, builder *builder) preparedPath
+	addAppRoot(index int, resource ingress.Ingress, builder *builder)
+	httpRedirect(resource ingress.Ingress, tlsHost bool, builder *builder) redirectPlan
+}
+
+type preparedPath struct {
+	target             string
+	prefixLike         bool
+	allowTrailingSlash bool
+	rewrite            bool
+	prefixBoundaryNote string
+	trailingSlashNote  string
+	notes              []string
+	extraRequests      []requested
+	skip               bool
+}
+
+type redirectPlan struct {
+	enabled    bool
+	annotation string
+	note       string
+	sharedNote string
+}
+
+type genericProfile struct{}
+
+func (genericProfile) prepareHost(string, ingress.Ingress, *builder) {}
+
+func (profile genericProfile) prepareResource(_ int, resource ingress.Ingress, builder *builder) {
+	if len(resource.Annotations) == 0 {
+		return
+	}
+	builder.addWarning(Warning{
+		Code:    diag.CodePlanAnnotationsIgnored,
+		Ingress: resource.Key(),
+		Message: fmt.Sprintf("%d annotations ignored by the generic profile", len(resource.Annotations)),
+	})
+}
+
+func (genericProfile) preparePath(_ ingress.Ingress, path ingress.Path, _ bool, _ *builder) preparedPath {
+	target := path.Path
+	notes := []string(nil)
+	if target == "" {
+		target = "/"
+		notes = append(notes, "an omitted path is planned as /")
+	}
+	prefixLike := strings.EqualFold(strings.TrimSpace(path.PathType), "prefix")
+	boundaryNote := ""
+	if prefixLike {
+		boundaryNote = "Prefix matches by path element, so /api must not match /apivarco (Kubernetes Prefix semantics)"
+	}
+	trailingNote := "declared with a trailing slash; probes the same path without it"
+	if !strings.HasSuffix(target, "/") {
+		trailingNote = "declared without a trailing slash; probes the same path with an extra slash"
+	}
+	return preparedPath{
+		target:             target,
+		prefixLike:         prefixLike,
+		allowTrailingSlash: true,
+		prefixBoundaryNote: boundaryNote,
+		trailingSlashNote:  trailingNote,
+		notes:              notes,
+	}
+}
+
+func (genericProfile) addAppRoot(int, ingress.Ingress, *builder) {}
+
+func (genericProfile) httpRedirect(_ ingress.Ingress, tlsHost bool, _ *builder) redirectPlan {
+	return redirectPlan{
+		enabled: tlsHost,
+		note:    "spec.tls covers the host, so varco plans the plain-HTTP redirect case",
+	}
+}
+
 func newBuilder(options Options) *builder {
-	return &builder{options: options, regexHosts: map[string]string{}, tlsHosts: map[string]bool{}}
+	profile := profileBehavior(nginxProfile{})
+	planProfile := ProfileNginx
+	if options.Profile == ProfileGeneric {
+		profile = genericProfile{}
+		planProfile = ProfileGeneric
+	}
+	if options.Profile == "" {
+		options.Profile = ProfileNginx
+	}
+	return &builder{
+		options:    options,
+		profile:    profile,
+		plan:       Plan{Profile: planProfile},
+		regexHosts: map[string]string{},
+		tlsHosts:   map[string]bool{},
+	}
 }
 
 // run filters resources by class, resolves every rule host once, then generates
@@ -266,9 +346,7 @@ func (b *builder) resolveHosts(index int, resource ingress.Ingress) {
 		default:
 			resolved[ruleIndex] = resolvedRule{host: rule.Host, ok: true}
 		}
-		if b.regexEnabled(resource) {
-			b.markRegexHost(resolved[ruleIndex].host, resource.Key())
-		}
+		b.profile.prepareHost(resolved[ruleIndex].host, resource, b)
 		if resourceHasTLS(resource, rule.Host, resolved[ruleIndex].host) {
 			b.tlsHosts[resolved[ruleIndex].host] = true
 		}
@@ -276,25 +354,10 @@ func (b *builder) resolveHosts(index int, resource ingress.Ingress) {
 	b.hosts[index] = resolved
 }
 
-// markRegexHost records that a host is matched as a regex and warns once per
-// host, because the scope is host-wide and spans Ingress resources (blog
-// behaviors 2 and 3).
-func (b *builder) markRegexHost(host, ingressKey string) {
-	if _, ok := b.regexHosts[host]; ok {
-		return
-	}
-	b.regexHosts[host] = ingressKey
-	b.addWarning(Warning{
-		Code:    diag.CodePlanRegexHostWide,
-		Ingress: ingressKey,
-		Message: fmt.Sprintf("use-regex or rewrite-target on %s makes ingress-nginx match every path of host %s as a case-insensitive regex", ingressKey, host),
-	})
-}
-
 // addResource plans one Ingress: annotation findings, one pass over rule hosts
 // and paths, then the Ingress-wide app-root case.
 func (b *builder) addResource(index int, resource ingress.Ingress) {
-	b.addAnnotationFindings(resource)
+	b.profile.prepareResource(index, resource, b)
 	beforeCases := len(b.plan.Cases)
 	beforeFindings := len(b.plan.Unsupported)
 	ruleExplained := false
@@ -319,7 +382,7 @@ func (b *builder) addResource(index int, resource ingress.Ingress) {
 			b.addPath(resource, resolved.host, path, source)
 		}
 	}
-	b.addAppRoot(index, resource)
+	b.profile.addAppRoot(index, resource, b)
 	if len(b.plan.Cases) == beforeCases && len(b.plan.Unsupported) == beforeFindings && !ruleExplained {
 		message := "Ingress has no plannable HTTP path"
 		if resource.DefaultBackend {
@@ -329,91 +392,14 @@ func (b *builder) addResource(index int, resource ingress.Ingress) {
 	}
 }
 
-// addAnnotationFindings reports every nginx annotation varco cannot test
-// black-box, once per Ingress and annotation name.
-func (b *builder) addAnnotationFindings(resource ingress.Ingress) {
-	names := make([]string, 0, len(resource.Annotations))
-	for name := range resource.Annotations {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		if !strings.HasPrefix(name, annotationPrefix) {
-			continue
-		}
-		if name == annotationCORSAllowHeaders {
-			// cors-allow-headers only changes behavior with enable-cors, itself a
-			// handled annotation, so report it instead of dropping it silently.
-			if enabled, _ := b.annotationBool(resource, annotationEnableCORS); !enabled {
-				b.addFinding(Finding{
-					Code:       diag.CodePlanAnnotationNotTestable,
-					Ingress:    resource.Key(),
-					Annotation: name,
-					Message:    "annotation cors-allow-headers has no effect without enable-cors: true; no case is generated from it",
-				})
-			}
-			continue
-		}
-		if isHandledAnnotation(name) {
-			continue
-		}
-		b.addFinding(Finding{
-			Code:       diag.CodePlanAnnotationNotTestable,
-			Ingress:    resource.Key(),
-			Annotation: name,
-			Message:    annotationMessage(name),
-		})
-	}
-}
-
 // addPath emits the cases for one rule host and one HTTP path.
 func (b *builder) addPath(resource ingress.Ingress, host string, path ingress.Path, source Source) {
-	// An omitted path is only legal for pathType ImplementationSpecific, and
-	// ingress-nginx treats it as "/".
-	declared := path.Path
-	omitted := declared == ""
-	if omitted {
-		declared = "/"
-	}
-	prefixLike, typeNote := pathTypeBehaviour(path.PathType)
-	regexIngress := b.regexEnabled(resource)
-	regexPath := regexIngress || containsRegexMeta(declared)
-	rewrite := resource.Annotations[annotationRewriteTarget] != ""
 	_, hostRegex := b.regexHosts[host]
-	regexMatch := regexPath || hostRegex
-
-	target := declared
-	derived := false
-	var notes []string
-	if typeNote != "" {
-		notes = append(notes, typeNote)
+	prepared := b.profile.preparePath(resource, path, hostRegex, b)
+	if prepared.skip {
+		return
 	}
-	// Blog behavior 2: on a host where use-regex or rewrite-target is active,
-	// ingress-nginx compiles an Exact path as a prefix regex too, so varco probes
-	// the deeper and the boundary path for it as well.
-	if !prefixLike && hostRegex {
-		prefixLike = true
-		notes = append(notes, "an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2)")
-	}
-	if omitted {
-		notes = append(notes, "an omitted path is treated as / by ingress-nginx")
-	}
-	if regexPath {
-		sample, ok := regexSample(declared)
-		if !ok {
-			b.addFinding(Finding{
-				Code:    diag.CodePlanRegexSample,
-				Ingress: resource.Key(),
-				Path:    path.Path,
-				Message: fmt.Sprintf("cannot derive a sample request path from regex %q; varco never guesses a matching path", path.Path),
-			})
-			return
-		}
-		if derived = sample != path.Path; derived {
-			notes = append(notes, fmt.Sprintf("path %q is a regex and is sampled as %q", path.Path, sample))
-		}
-		target = sample
-	}
+	target := prepared.target
 	if !strings.HasPrefix(target, "/") {
 		b.addFinding(Finding{
 			Code:    diag.CodePlanManifest,
@@ -423,97 +409,50 @@ func (b *builder) addPath(resource ingress.Ingress, host string, path ingress.Pa
 		})
 		return
 	}
+
 	baseFamily := FamilyBase
 	baseAnnotation := ""
-	if rewrite {
+	if prepared.rewrite {
 		baseFamily = FamilyRewrite
 		baseAnnotation = annotationRewriteTarget
-		notes = append(notes, "rewrite-target rewrites the upstream path (blog behavior 3)")
-		if value := resource.Annotations[annotationRewriteTarget]; strings.Contains(value, "$") || regexPath {
-			notes = append(notes, "rewrite-target capture groups enable regex matching for the whole host")
-		}
 	}
 
-	requests := make([]requested, 0, 8)
+	requests := make([]requested, 0, 8+len(prepared.extraRequests))
 	requests = append(requests, requested{family: baseFamily, path: target, method: MethodGet, annotation: baseAnnotation})
-	// Regex paths never answer with a redirect for a missing trailing slash
-	// (blog behavior 4), so that family only applies to literal paths.
-	if !regexPath {
+	if prepared.allowTrailingSlash {
 		if alternate, ok := toggleTrailingSlash(target); ok {
-			requests = append(requests, requested{family: FamilyTrailingSlash, path: alternate, method: MethodGet, note: trailingSlashNote(target)})
+			requests = append(requests, requested{family: FamilyTrailingSlash, path: alternate, method: MethodGet, note: prepared.trailingSlashNote})
 		}
 	}
-	if prefixLike && !derived {
+	if prepared.prefixLike {
 		subpathFamily := FamilySubpath
-		if rewrite {
+		if prepared.rewrite {
 			subpathFamily = FamilyRewrite
 		}
 		requests = append(requests, requested{family: subpathFamily, path: subpath(target), method: MethodGet, annotation: baseAnnotation})
 		if target != "/" {
-			requests = append(requests, requested{family: FamilyPrefixBoundary, path: target + "varco", method: MethodGet, note: prefixBoundaryNote(regexMatch)})
-		}
-	}
-	if regexPath || hostRegex {
-		if flipped, ok := flipCase(target); ok {
-			requests = append(requests, requested{family: FamilyCaseFlip, path: flipped, method: MethodGet, note: caseFlipNote(regexIngress, regexPath)})
+			requests = append(requests, requested{family: FamilyPrefixBoundary, path: target + "varco", method: MethodGet, note: prepared.prefixBoundaryNote})
 		}
 	}
 	requests = append(requests,
 		requested{family: FamilyDotSegments, path: dotSegments(target), method: MethodGet, note: "dot segments are resolved before matching (blog behavior 5)"},
 		requested{family: FamilyDoubleSlash, path: doubleSlash(target), method: MethodGet, note: "repeated slashes are normalized or answered with 301 (blog behavior 5)"},
 	)
-	if enabled, _ := b.annotationBool(resource, annotationEnableCORS); enabled {
-		requests = append(requests, requested{family: FamilyCORSPreflight, path: target, method: MethodOptions, headers: corsHeaders(resource), annotation: annotationEnableCORS, note: "enable-cors answers an OPTIONS preflight"})
-	}
-	for _, redirect := range []struct {
-		name        string
-		codeName    string
-		defaultCode string
-	}{
-		{annotationPermanentRedirect, annotationPermanentRedirectCode, "301"},
-		{annotationTemporalRedirect, annotationTemporalRedirectCode, "302"},
-	} {
-		if _, ok := resource.Annotations[redirect.name]; !ok {
-			continue
-		}
-		code := strings.TrimSpace(resource.Annotations[redirect.codeName])
-		if code == "" {
-			code = redirect.defaultCode
-		}
-		requests = append(requests, requested{family: FamilyRedirectAnnotation, path: target, method: MethodGet, annotation: redirect.name, note: fmt.Sprintf("%s answers with a redirect (expected code %s)", strings.TrimPrefix(redirect.name, annotationPrefix), code)})
-	}
-	b.emit(resource, host, source, requests, joinNotes(notes...))
-}
-
-// addAppRoot plans the app-root redirect, which applies to the whole Ingress:
-// the case targets the Ingress first rule that has a host.
-func (b *builder) addAppRoot(index int, resource ingress.Ingress) {
-	value, ok := resource.Annotations[annotationAppRoot]
-	if !ok {
-		return
-	}
-	for ruleIndex, rule := range b.hosts[index] {
-		if !rule.ok {
-			continue
-		}
-		source := Source{Ingress: resource.Key(), Rule: ruleIndex, Annotation: annotationAppRoot}
-		note := fmt.Sprintf("app-root %q redirects / to the application root (source points at the Ingress first rule with a host)", value)
-		b.emit(resource, rule.host, source, []requested{{family: FamilyAppRoot, path: "/", method: MethodGet, annotation: annotationAppRoot}}, note)
-		return
-	}
+	requests = append(requests, prepared.extraRequests...)
+	b.emit(resource, host, source, requests, joinNotes(prepared.notes...))
 }
 
 // emit resolves the scheme and SNI for the host, appends the cases, and adds
-// the plain-HTTP redirect case when the host serves TLS or enables ssl-redirect,
-// unless ssl-redirect or force-ssl-redirect is explicitly false.
+// the plain-HTTP redirect case selected by the active profile.
 func (b *builder) emit(resource ingress.Ingress, host string, source Source, requests []requested, shared string) {
 	scheme, sni := SchemeHTTP, ""
 	tls := b.tlsHosts[host]
 	if tls {
 		scheme, sni = SchemeHTTPS, host
 	}
-	if enabled, set := b.sslRedirectAnnotation(resource); set && !enabled && tls {
-		shared = joinNotes(shared, "ssl-redirect/force-ssl-redirect is explicitly false, so varco plans no plain-HTTP redirect for this TLS host")
+	redirect := b.profile.httpRedirect(resource, tls, b)
+	if redirect.sharedNote != "" {
+		shared = joinNotes(shared, redirect.sharedNote)
 	}
 	for _, item := range requests {
 		caseSource := source
@@ -530,7 +469,7 @@ func (b *builder) emit(resource ingress.Ingress, host string, source Source, req
 			Note:    joinNotes(item.note, shared),
 		})
 	}
-	if !b.redirectsPlainHTTP(resource, tls) {
+	if !redirect.enabled {
 		return
 	}
 	seen := make(map[string]bool, len(requests))
@@ -540,7 +479,7 @@ func (b *builder) emit(resource ingress.Ingress, host string, source Source, req
 		}
 		seen[item.path] = true
 		caseSource := source
-		caseSource.Annotation = redirectAnnotation(resource)
+		caseSource.Annotation = redirect.annotation
 		b.appendCase(Case{
 			Host:   host,
 			Scheme: SchemeHTTP,
@@ -548,7 +487,7 @@ func (b *builder) emit(resource ingress.Ingress, host string, source Source, req
 			Path:   item.path,
 			Family: FamilyHTTPRedirect,
 			Source: caseSource,
-			Note:   "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host",
+			Note:   redirect.note,
 		})
 	}
 }
@@ -603,46 +542,6 @@ func hasControlBytes(s string) bool {
 	return false
 }
 
-// annotationBool parses a boolean annotation with strconv.ParseBool semantics
-// (1, t, T, TRUE, true, True and the false forms). An unparsable value counts as
-// unset and records a VAR-PLAN-0007 warning.
-func (b *builder) annotationBool(resource ingress.Ingress, name string) (value, set bool) {
-	raw, ok := resource.Annotations[name]
-	if !ok {
-		return false, false
-	}
-	parsed, err := strconv.ParseBool(strings.TrimSpace(raw))
-	if err != nil {
-		b.addWarning(Warning{
-			Code:    diag.CodePlanAnnotationBool,
-			Ingress: resource.Key(),
-			Message: fmt.Sprintf("annotation %s has value %q which is not a boolean; varco treats it as unset", name, raw),
-		})
-		return false, false
-	}
-	return parsed, true
-}
-
-// trailingSlashNote names the direction a trailing-slash case probes, so a note
-// never claims an answer varco has not verified.
-func trailingSlashNote(declared string) string {
-	if strings.HasSuffix(declared, "/") {
-		return "declared with a trailing slash; probes the same path without it (blog behavior 4)"
-	}
-	return "declared without a trailing slash; probes the same path with an extra slash (blog behavior 4); probes slash handling, expected behavior unverified (VERIFY)"
-}
-
-// redirectsPlainHTTP reports whether plain HTTP on a host is redirected to
-// HTTPS. A host with TLS redirects by default; ssl-redirect and
-// force-ssl-redirect override that default, so an explicit false turns the
-// redirect off even for a TLS host.
-func (b *builder) redirectsPlainHTTP(resource ingress.Ingress, tlsHost bool) bool {
-	if enabled, set := b.sslRedirectAnnotation(resource); set {
-		return enabled
-	}
-	return tlsHost
-}
-
 func (b *builder) addFinding(finding Finding) {
 	b.plan.Unsupported = append(b.plan.Unsupported, finding)
 }
@@ -656,57 +555,6 @@ func (b *builder) matchesClass(resource ingress.Ingress) bool {
 		return true
 	}
 	return resource.ClassName == b.options.IngressClass || resource.Annotations[AnnotationIngressClass] == b.options.IngressClass
-}
-
-// pathTypeBehaviour maps a manifest pathType to Prefix-like matching and to the
-// note explaining any approximation.
-func pathTypeBehaviour(pathType string) (prefixLike bool, note string) {
-	switch strings.ToLower(strings.TrimSpace(pathType)) {
-	case "exact":
-		return false, ""
-	case "prefix":
-		return true, ""
-	case "implementationspecific":
-		return true, "pathType ImplementationSpecific is treated as a Prefix-like match"
-	default:
-		return true, fmt.Sprintf("unknown pathType %q is treated as a Prefix-like match", pathType)
-	}
-}
-
-// regexEnabled reports whether an Ingress turns on regex matching for its host:
-// use-regex, or rewrite-target which enables it silently (blog behaviors 2 and 3).
-func (b *builder) regexEnabled(resource ingress.Ingress) bool {
-	if enabled, _ := b.annotationBool(resource, annotationUseRegex); enabled {
-		return true
-	}
-	return resource.Annotations[annotationRewriteTarget] != ""
-}
-
-// sslRedirectAnnotation returns the ssl-redirect or force-ssl-redirect value and
-// whether one of them is set. ssl-redirect wins over force-ssl-redirect, the
-// precedence ingress-nginx uses. ingress-nginx reads these as booleans, so only
-// "true" enables the redirect and any other explicit value disables it.
-func (b *builder) sslRedirectAnnotation(resource ingress.Ingress) (enabled, set bool) {
-	// Either annotation set to true forces the redirect (VERIFY: precedence when
-	// ssl-redirect is false and force-ssl-redirect is true). An unparsable value
-	// counts as unset and is warned about, never as an explicit false.
-	for _, name := range []string{annotationSSLRedirect, annotationForceSSLRedirect} {
-		if value, ok := b.annotationBool(resource, name); ok {
-			set = true
-			enabled = enabled || value
-		}
-	}
-	return enabled, set
-}
-
-// redirectAnnotation names the annotation responsible for the HTTP redirect.
-func redirectAnnotation(resource ingress.Ingress) string {
-	for _, name := range []string{annotationSSLRedirect, annotationForceSSLRedirect} {
-		if _, ok := resource.Annotations[name]; ok {
-			return name
-		}
-	}
-	return ""
 }
 
 // resourceHasTLS reports whether spec.tls covers the rule host. A spec.tls
@@ -725,80 +573,6 @@ func resourceHasTLS(resource ingress.Ingress, ruleHost, effectiveHost string) bo
 		}
 	}
 	return false
-}
-
-// containsRegexMeta reports whether a path uses regex metacharacters.
-func containsRegexMeta(path string) bool {
-	return strings.ContainsAny(path, regexMeta)
-}
-
-// regexSample derives one literal request path from a supported regex form.
-// The forms documented in docs/adr/0005-plan-case-families.md are sampled: a
-// literal with an optional trailer of (/|$)(.*), (/|$), (/.*), /(.*), /.* or
-// (.*), and a bare literal with an optional leading ^. Anything else is
-// reported as unsupported.
-func regexSample(pattern string) (string, bool) {
-	candidate := strings.TrimPrefix(pattern, "^")
-	if !strings.HasPrefix(candidate, "/") {
-		return "", false
-	}
-	for _, suffix := range []string{"(/|$)(.*)", "(/|$)", "(/.*)", "/(.*)", "/.*", "(.*)"} {
-		if literal, ok := strings.CutSuffix(candidate, suffix); ok {
-			if literal == "" || containsRegexMeta(literal) {
-				return "", false
-			}
-			return strings.TrimSuffix(literal, "/") + "/" + probeSegment, true
-		}
-	}
-	if containsRegexMeta(candidate) {
-		return "", false
-	}
-	return candidate, true
-}
-
-// flipCase returns the path with the case of every letter swapped.
-func flipCase(path string) (string, bool) {
-	var flipped strings.Builder
-	flipped.Grow(len(path))
-	changed := false
-	for _, r := range path {
-		switch {
-		case unicode.IsUpper(r):
-			flipped.WriteRune(unicode.ToLower(r))
-			changed = true
-		case unicode.IsLower(r):
-			flipped.WriteRune(unicode.ToUpper(r))
-			changed = true
-		default:
-			flipped.WriteRune(r)
-		}
-	}
-	if !changed {
-		return "", false
-	}
-	return flipped.String(), true
-}
-
-// prefixBoundaryNote explains what a prefix boundary case probes. In regex mode
-// ingress-nginx matches the declared path as a prefix regex, so a boundary that
-// K8s Prefix matching rejects is expected to match there (blog behavior 1).
-func prefixBoundaryNote(regexPath bool) string {
-	if regexPath {
-		return "with use-regex the path is matched as a prefix regex, so /api may match /apivarco (blog behavior 1)"
-	}
-	return "Prefix matches by path element, so /api must not match /apivarco (blog behavior 1)"
-}
-
-// caseFlipNote explains why a case flipped the case of a path.
-func caseFlipNote(regexIngress, regexPath bool) string {
-	switch {
-	case regexIngress:
-		return "use-regex or rewrite-target makes matching case-insensitive (blog behaviors 1 to 3)"
-	case regexPath:
-		return "the path looks like a regex, so matching may be case-insensitive (blog behaviors 1 to 3)"
-	default:
-		return "another Ingress of this host enables regex matching, which is host-wide (blog behavior 2)"
-	}
 }
 
 // toggleTrailingSlash returns the path with its trailing slash toggled and
@@ -831,22 +605,6 @@ func doubleSlash(path string) string {
 	return "//" + strings.TrimPrefix(path, "/")
 }
 
-// corsHeaders builds the deterministic preflight headers. cors-allow-headers
-// is echoed as request headers; no header carries credentials.
-func corsHeaders(resource ingress.Ingress) []Header {
-	headers := []Header{
-		{Name: "Access-Control-Request-Method", Values: []string{MethodGet}},
-		{Name: "Origin", Values: []string{"https://varco.invalid"}},
-	}
-	if value, ok := resource.Annotations[annotationCORSAllowHeaders]; ok {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			headers = append(headers, Header{Name: "Access-Control-Request-Headers", Values: []string{trimmed}})
-		}
-	}
-	sort.Slice(headers, func(i, j int) bool { return headers[i].Name < headers[j].Name })
-	return headers
-}
-
 // joinNotes drops empty notes and joins the rest with a semicolon.
 func joinNotes(notes ...string) string {
 	kept := make([]string, 0, len(notes))
@@ -856,45 +614,4 @@ func joinNotes(notes ...string) string {
 		}
 	}
 	return strings.Join(kept, "; ")
-}
-
-// isHandledAnnotation reports whether varco consumes an annotation and
-// therefore must not report it as unsupported.
-func isHandledAnnotation(name string) bool {
-	switch name {
-	case annotationUseRegex, annotationRewriteTarget, annotationSSLRedirect, annotationForceSSLRedirect,
-		annotationEnableCORS, annotationCORSAllowHeaders, annotationAppRoot,
-		annotationPermanentRedirect, annotationTemporalRedirect,
-		annotationPermanentRedirectCode, annotationTemporalRedirectCode, AnnotationIngressClass:
-		return true
-	default:
-		return false
-	}
-}
-
-// annotationMessage explains why an annotation produced no case.
-func annotationMessage(name string) string {
-	if notTestableAnnotation(name) {
-		return fmt.Sprintf("annotation %s cannot be tested black-box by varco", name)
-	}
-	return fmt.Sprintf("annotation %s is unknown to varco; no case is generated from it", name)
-}
-
-// notTestableAnnotation reports whether varco recognizes an annotation but
-// cannot test it black-box. Recognized annotations are listed in docs/plan.md.
-func notTestableAnnotation(name string) bool {
-	trimmed := strings.TrimPrefix(name, annotationPrefix)
-	switch trimmed {
-	case "upstream-vhost", "backend-protocol", "ssl-passthrough",
-		"configuration-snippet", "server-snippet", "custom-headers",
-		"whitelist-source-range", "denylist-source-range",
-		"service-upstream", "affinity", "server-alias", "keepalive", "upstream-hash-by":
-		return true
-	}
-	for _, prefix := range []string{"proxy-", "auth-", "canary", "limit-", "session-cookie", "opentelemetry", "modsecurity", "cors-", "server-"} {
-		if strings.HasPrefix(trimmed, prefix) {
-			return true
-		}
-	}
-	return false
 }
