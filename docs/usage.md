@@ -17,6 +17,34 @@ varco plan -f ./manifests --ingress-class nginx --format table
 varco plan -f - --format json < ingress.yaml
 ```
 
+### Reading from a cluster
+
+`varco plan --from-cluster` and `varco run --from-cluster` read Ingresses and the ingress-nginx controller ConfigMap from the user's current kubeconfig. They invoke only `kubectl get`; varco never writes to the cluster or sets credentials.
+
+```sh
+varco plan --from-cluster --namespace apps --format json
+varco run --from-cluster --old 10.0.0.1 --new 10.0.0.2
+```
+
+Use `--kube-context CONTEXT`, `--kubeconfig FILE`, and `--kube-timeout DURATION` to select or bound kubectl access. `--controller-configmap NAMESPACE/NAME` defaults to `ingress-nginx/ingress-nginx-controller`; pass an empty value to disable ConfigMap warnings. `--from-cluster` is mutually exclusive with `-f` and `--plan`.
+
+A read-only identity needs permission to list Ingresses cluster-wide (or in `--namespace`) and get the controller ConfigMap. For example:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: varco-plan-reader
+rules:
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["ingress-nginx-controller"]
+    verbs: ["get"]
+```
+
 ## varco run
 
 Executes a plan against two endpoints, evaluates the differences through a

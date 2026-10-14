@@ -49,6 +49,9 @@ const (
 	CodePlanAnnotationBool Code = "VAR-PLAN-0007"
 	// CodePlanNoPath reports an Ingress or rule with no plannable HTTP path.
 	CodePlanNoPath Code = "VAR-PLAN-0008"
+	// CodePlanConfigMap reports a controller ConfigMap setting that can change
+	// observable request or response behavior.
+	CodePlanConfigMap Code = "VAR-PLAN-0010"
 )
 
 // Severity is a diagnostic impact level.
@@ -146,6 +149,7 @@ func List() []Entry {
 		{Code: CodePlanRegexHostWide, Area: "PLAN", Title: "Host-wide regex scope", Severity: SeverityWarning, Description: "use-regex or rewrite-target on one Ingress makes ingress-nginx match every path of that host as regex, including paths declared by other Ingresses.", Remediation: "Check every path of this host explicitly; the gateway implementation may match them literally."},
 		{Code: CodePlanAnnotationBool, Area: "PLAN", Title: "Annotation value is not a boolean", Severity: SeverityWarning, Description: "An annotation that ingress-nginx reads as a boolean does not parse as one, so varco treats it as unset.", Remediation: "Set the annotation to a boolean value such as true or false, or remove it."},
 		{Code: CodePlanNoPath, Area: "PLAN", Title: "No plannable HTTP path", Severity: SeverityWarning, Description: "An Ingress serves only spec.defaultBackend, or a rule has no HTTP path, so varco can plan no case for it.", Remediation: "Add an HTTP path with a backend, or probe the default backend manually."},
+		{Code: CodePlanConfigMap, Area: "PLAN", Title: "Controller ConfigMap setting", Severity: SeverityWarning, Description: "An ingress-nginx controller ConfigMap setting can change observable request or response behavior and is not encoded in an Ingress manifest.", Remediation: "Compare the value on both controllers and verify the behavior against the ingress-nginx ConfigMap documentation."},
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Code < entries[j].Code })
 	return entries

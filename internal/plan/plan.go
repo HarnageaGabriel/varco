@@ -80,6 +80,9 @@ type Options struct {
 	IngressClass string
 	// DefaultHost is used for rules that declare no host; empty leaves them unplanned.
 	DefaultHost string
+	// ControllerConfig is the ingress-nginx controller ConfigMap data used by
+	// ConfigMapWarnings when the CLI loads a cluster.
+	ControllerConfig map[string]string
 }
 
 // Build derives cases and findings from parsed Ingress resources. Resources are
