@@ -3,6 +3,8 @@ package compare
 
 import (
 	"fmt"
+	"maps"
+	"net/http" //nolint:depguard // ParseSetCookie is used only as a pure standards parser.
 	"slices"
 	"sort"
 	"strings"
@@ -52,6 +54,18 @@ func Results(path string, oldResult, newResult result.Result, ignoreHeaders []st
 	if !ignored["location"] {
 		addHeader(diag.CodeCompareLocation, "location")
 	}
+	if !ignored["set-cookie"] {
+		oldValues, oldOK := header(oldResult, "set-cookie")
+		newValues, newOK := header(newResult, "set-cookie")
+		oldCookies := parseSetCookies(oldValues, oldOK)
+		newCookies := parseSetCookies(newValues, newOK)
+		if !equalCookieSets(oldCookies, newCookies) {
+			differences = append(differences, Difference{
+				Path: path, Code: diag.CodeCompareCookie, Field: "header.set-cookie",
+				Old: renderCookieSet(oldCookies), New: renderCookieSet(newCookies),
+			})
+		}
+	}
 	for _, name := range comparedHeaders {
 		if !ignored[name] {
 			addHeader(diag.CodeCompareHeader, name)
@@ -72,6 +86,91 @@ func Results(path string, oldResult, newResult result.Result, ignoreHeaders []st
 		return differences[i].Code < differences[j].Code
 	})
 	return differences
+}
+
+type cookieAttributes struct {
+	Secure, HTTPOnly, HasMaxAge, HasExpires, Partitioned bool
+	SameSite, Path, Domain                               string
+}
+
+type cookieSet struct {
+	present bool
+	invalid int
+	cookies map[string]cookieAttributes
+}
+
+func parseSetCookies(values []string, present bool) cookieSet {
+	set := cookieSet{present: present, cookies: make(map[string]cookieAttributes)}
+	for _, value := range values {
+		cookie, err := http.ParseSetCookie(value)
+		if err != nil {
+			set.invalid++
+			continue
+		}
+		set.cookies[cookie.Name] = cookieAttributes{
+			Secure: cookie.Secure, HTTPOnly: cookie.HttpOnly,
+			SameSite: sameSiteName(cookie.SameSite), Path: cookie.Path, Domain: cookie.Domain,
+			HasMaxAge: hasCookieAttribute(value, "Max-Age"), HasExpires: hasCookieAttribute(value, "Expires"), Partitioned: cookie.Partitioned,
+		}
+	}
+	return set
+}
+
+func hasCookieAttribute(raw, name string) bool {
+	parts := strings.Split(raw, ";")
+	for _, part := range parts[1:] {
+		attribute, _, _ := strings.Cut(strings.TrimSpace(part), "=")
+		if strings.EqualFold(attribute, name) {
+			return true
+		}
+	}
+	return false
+}
+
+func equalCookieSets(oldSet, newSet cookieSet) bool {
+	return oldSet.present == newSet.present && oldSet.invalid == newSet.invalid && maps.Equal(oldSet.cookies, newSet.cookies)
+}
+
+func renderCookieSet(set cookieSet) string {
+	if !set.present {
+		return "(absent)"
+	}
+	names := make([]string, 0, len(set.cookies))
+	for name := range set.cookies {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	parts := make([]string, 0, len(names)+1)
+	for _, name := range names {
+		attributes := set.cookies[name]
+		parts = append(parts, fmt.Sprintf(
+			"%s{secure=%t,http_only=%t,same_site=%s,path=%q,domain=%q,max_age=%t,expires=%t,partitioned=%t}",
+			name, attributes.Secure, attributes.HTTPOnly, attributes.SameSite, attributes.Path, attributes.Domain,
+			attributes.HasMaxAge, attributes.HasExpires, attributes.Partitioned,
+		))
+	}
+	if set.invalid != 0 {
+		parts = append(parts, fmt.Sprintf("invalid=%d", set.invalid))
+	}
+	if len(parts) == 0 {
+		return "(empty)"
+	}
+	return strings.Join(parts, ", ")
+}
+
+func sameSiteName(sameSite http.SameSite) string {
+	switch sameSite {
+	case http.SameSiteDefaultMode:
+		return "Default"
+	case http.SameSiteLaxMode:
+		return "Lax"
+	case http.SameSiteStrictMode:
+		return "Strict"
+	case http.SameSiteNoneMode:
+		return "None"
+	default:
+		return "Unknown"
+	}
 }
 
 // header returns the ordered values of a response header and whether it is

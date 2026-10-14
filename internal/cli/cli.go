@@ -82,6 +82,7 @@ func runDiff(args []string, stdout, stderr io.Writer) int {
 	rate := flags.Float64("rate", 5, "maximum requests per second")
 	format := flags.String("format", "table", "table or json")
 	allowUnsafe := flags.Bool("allow-unsafe-methods", false, "allow methods other than GET, HEAD, OPTIONS")
+	showSensitive := flags.Bool("show-sensitive", false, "show raw sensitive Location values")
 	var headerValues, ignoreHeaders stringsFlag
 	flags.Var(&headerValues, "header", "request header NAME=VALUE (repeatable)")
 	flags.Var(&ignoreHeaders, "ignore-header", "response header to ignore (repeatable)")
@@ -90,6 +91,9 @@ func runDiff(args []string, stdout, stderr io.Writer) int {
 			return 0
 		}
 		return 2
+	}
+	if *showSensitive {
+		_, _ = fmt.Fprintln(stderr, "warning: --show-sensitive exposes raw Location values")
 	}
 	if *oldValue == "" || *newValue == "" || *host == "" {
 		return configFailure(stderr, "--old, --new, and --host are required")
@@ -156,16 +160,16 @@ func runDiff(args []string, stdout, stderr io.Writer) int {
 		return 3
 	}
 	if *format == "json" {
-		err = report.JSON(stdout, outcome.Differences)
+		err = report.JSON(stdout, outcome.Differences, report.Options{ShowSensitive: *showSensitive})
 	} else {
-		err = report.Table(stdout, outcome.Differences)
+		err = report.Table(stdout, outcome.Differences, report.Options{ShowSensitive: *showSensitive})
 	}
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, "report:", err)
 		return 4
 	}
 	for _, failure := range outcome.Failures {
-		diagnostic, _ := diag.New(diag.CodeEndpointUnreachable, fmt.Sprintf("path %s via %s: %v", failure.Path, failure.Endpoint, failure.Err))
+		diagnostic, _ := diag.New(diag.CodeEndpointUnreachable, fmt.Sprintf("path of length %d via %s: %v", len(failure.Path), failure.Endpoint, failure.Err))
 		_, _ = fmt.Fprintf(stderr, "%s: %s\n", diagnostic.Code, diagnostic.Message)
 	}
 	if len(outcome.Failures) != 0 {

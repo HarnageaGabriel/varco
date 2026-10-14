@@ -29,6 +29,11 @@ const (
 	maxInterimResponses = 8
 )
 
+var (
+	errInvalidResponse     = errors.New("invalid HTTP response")
+	errInvalidResponseBody = errors.New("invalid HTTP response body")
+)
+
 // Request configures one endpoint probe.
 type Request struct {
 	Endpoint          endpoint.Endpoint
@@ -135,12 +140,12 @@ func Do(ctx context.Context, request Request) (result.Result, error) {
 		}
 		parsed, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(header)), &http.Request{Method: method}) //nolint:bodyclose // body is never drained; the connection is closed by defer conn.Close.
 		if err != nil {
-			return result.Result{}, ioFailure(ctx, request.Endpoint.String(), "read response", err)
+			return result.Result{}, ioFailure(ctx, request.Endpoint.String(), "read response", errInvalidResponse)
 		}
 		if parsed.StatusCode < 100 || parsed.StatusCode >= 200 || parsed.StatusCode == http.StatusSwitchingProtocols {
 			response, err = http.ReadResponse(bufio.NewReader(io.MultiReader(bytes.NewReader(header), reader)), &http.Request{Method: method}) //nolint:bodyclose // body is consumed by capture; the connection is closed by defer conn.Close.
 			if err != nil {
-				return result.Result{}, ioFailure(ctx, request.Endpoint.String(), "read response", err)
+				return result.Result{}, ioFailure(ctx, request.Endpoint.String(), "read response", errInvalidResponse)
 			}
 			break
 		}
@@ -196,7 +201,7 @@ func capture(response *http.Response, state *tls.ConnectionState, maxBodyBytes i
 	hasher := sha256.New()
 	size, err := io.Copy(hasher, io.LimitReader(response.Body, maxBodyBytes))
 	if err != nil {
-		return result.Result{}, fmt.Errorf("read response body: %w", err)
+		return result.Result{}, errInvalidResponseBody
 	}
 	truncated := false
 	if size == maxBodyBytes {
@@ -205,7 +210,7 @@ func capture(response *http.Response, state *tls.ConnectionState, maxBodyBytes i
 		if n > 0 {
 			truncated = true
 		} else if readErr != nil && !errors.Is(readErr, io.EOF) {
-			return result.Result{}, fmt.Errorf("read response body: %w", readErr)
+			return result.Result{}, errInvalidResponseBody
 		}
 	}
 	headers := canonicalHeaders(response.Header)
