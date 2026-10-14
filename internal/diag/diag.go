@@ -29,6 +29,18 @@ const (
 	CodeCompareCertificate Code = "VAR-CMP-0005"
 	// CodeCompareBody reports a response body mismatch.
 	CodeCompareBody Code = "VAR-CMP-0006"
+	// CodePlanAnnotationNotTestable reports an annotation varco cannot test black-box.
+	CodePlanAnnotationNotTestable Code = "VAR-PLAN-0001"
+	// CodePlanRegexSample reports a regex path varco cannot sample.
+	CodePlanRegexSample Code = "VAR-PLAN-0002"
+	// CodePlanManifest reports a manifest that cannot be parsed or is not supported.
+	CodePlanManifest Code = "VAR-PLAN-0003"
+	// CodePlanWildcardHost reports a wildcard host planned with a concrete label.
+	CodePlanWildcardHost Code = "VAR-PLAN-0004"
+	// CodePlanRuleWithoutHost reports a rule with no host and no default host.
+	CodePlanRuleWithoutHost Code = "VAR-PLAN-0005"
+	// CodePlanRegexHostWide reports host-wide regex scope in ingress-nginx.
+	CodePlanRegexHostWide Code = "VAR-PLAN-0006"
 )
 
 // Severity is a diagnostic impact level.
@@ -116,6 +128,12 @@ func List() []Entry {
 		{Code: CodeInvalidFlag, Area: "CFG", Title: "Invalid flag", Severity: SeverityError, Description: "A command-line flag is unknown or has an invalid value.", Remediation: "Correct the flag name or value and retry."},
 		{Code: CodeEndpointUnreachable, Area: "NET", Title: "Endpoint unreachable", Severity: SeverityError, Description: "The probe could not connect to the configured endpoint.", Remediation: "Verify the endpoint address, port, and network reachability."},
 		{Code: CodeUnsupportedMethod, Area: "RUN", Title: "Unsupported method", Severity: SeverityError, Description: "The requested HTTP method is not enabled for this run.", Remediation: "Use GET, HEAD, or OPTIONS, or explicitly opt in to the method for this case and run."},
+		{Code: CodePlanAnnotationNotTestable, Area: "PLAN", Title: "Annotation not testable", Severity: SeverityWarning, Description: "An Ingress annotation changes behavior that varco cannot observe black-box, or is unknown to varco.", Remediation: "Verify the annotation manually against the target controller, or confirm it is intentionally out of scope."},
+		{Code: CodePlanRegexSample, Area: "PLAN", Title: "Regex sample not derivable", Severity: SeverityWarning, Description: "A path uses regular expressions in a form varco cannot reduce to one literal request path.", Remediation: "Probe this path manually, or rewrite it with a literal prefix that varco can sample."},
+		{Code: CodePlanManifest, Area: "PLAN", Title: "Manifest parse error", Severity: SeverityError, Description: "A manifest could not be decoded, or uses an Ingress API version varco does not support.", Remediation: "Fix the manifest, or export the Ingress with apiVersion networking.k8s.io/v1."},
+		{Code: CodePlanWildcardHost, Area: "PLAN", Title: "Wildcard host substituted", Severity: SeverityWarning, Description: "A rule declares a wildcard host; cases use the concrete host varco-probe.<zone>.", Remediation: "Confirm that the wildcard certificate and routing cover an arbitrary single-label subdomain."},
+		{Code: CodePlanRuleWithoutHost, Area: "PLAN", Title: "Rule without host", Severity: SeverityWarning, Description: "A rule declares no host and no default host was provided, so no case could be generated for it.", Remediation: "Pass --default-host, or give the rule an explicit host."},
+		{Code: CodePlanRegexHostWide, Area: "PLAN", Title: "Host-wide regex scope", Severity: SeverityWarning, Description: "use-regex or rewrite-target on one Ingress makes ingress-nginx match every path of that host as regex, including paths declared by other Ingresses.", Remediation: "Check every path of this host explicitly; the gateway implementation may match them literally."},
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Code < entries[j].Code })
 	return entries

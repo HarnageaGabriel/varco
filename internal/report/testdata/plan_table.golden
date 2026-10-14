@@ -1,0 +1,12 @@
+CASES 2
+HOST             METHOD   SCHEME  PATH     FAMILY          ID
+api.example.com  GET      https   /health  base            0123456789ab
+api.example.com  OPTIONS  http    /health  cors-preflight  cdef01234567
+UNSUPPORTED 3
+CODE           INGRESS        TARGET                                       MESSAGE
+VAR-PLAN-0001  prod/checkout  nginx.ingress.kubernetes.io/proxy-body-size  annotation nginx.ingress.kubernetes.io/proxy-body-size cannot be tested black-box by varco
+VAR-PLAN-0002  prod/checkout  /api/v[0-9]+                                 cannot derive a sample request path from regex "/api/v[0-9]+"; varco never guesses a matching path
+VAR-PLAN-0005  prod/checkout  -                                            rule has no host and no --default-host was given; no case can be planned for it
+WARNINGS 1
+CODE           INGRESS        MESSAGE
+VAR-PLAN-0004  prod/checkout  wildcard host "*.example.com" is planned as "varco-probe.example.com"

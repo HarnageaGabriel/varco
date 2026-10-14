@@ -1,5 +1,22 @@
 # Usage
 
+## varco plan
+
+Reads Kubernetes Ingress manifests and prints the probe cases `varco run` will execute, plus what varco cannot test. Nothing is sent to the network and no cluster is contacted.
+
+```sh
+varco plan -f ingress.yaml --format json
+```
+
+Flags: `-f <file|directory|->` (repeatable; directories are walked recursively over `*.yaml`, `*.yml` and `*.json`, sorted by path), `--format (table|json)`, `--ingress-class NAME`, `--default-host HOST`. Manifests must be `networking.k8s.io/v1`; `kind: List` and multi-document streams are accepted and other kinds are ignored. Exit code 0 means a plan was produced (unsupported findings are part of the output), 2 is a usage or manifest parse error, 4 means the report could not be written. Case families, findings and the stable JSON schema are documented in [plan.md](plan.md).
+
+### Example: plan a directory of manifests
+
+```sh
+varco plan -f ./manifests --ingress-class nginx --format table
+varco plan -f - --format json < ingress.yaml
+```
+
 ## varco diff
 
 Sends the same request to two numeric IP endpoints and reports differences. `--old` and `--new` accept `IP`, `IPv4:port` or `[IPv6]:port`; hostnames are rejected (`VAR-CFG-0001`). `--host` sets the Host header. `--sni` accepts a hostname or IP address without a port and defaults to the hostname/IP portion of `--host`. Redirects are never followed. Exit codes: see [exit-codes.md](exit-codes.md).
@@ -40,3 +57,4 @@ varco diff --old 10.0.0.1 --new 10.0.0.2 --host api.example.com --sni edge.examp
 ```
 
 Ignored by default: Date, Server, Via, X-Request-Id, Set-Cookie values, and Content-Length when chunked. VERIFY: these are simply not part of the compared field set.
+

@@ -12,4 +12,10 @@
 | [VAR-CMP-0005](VAR-CMP-0005.md) | info | Certificate differs |
 | [VAR-CMP-0006](VAR-CMP-0006.md) | info | Body differs |
 | [VAR-NET-0001](VAR-NET-0001.md) | error | Endpoint unreachable |
+| [VAR-PLAN-0001](VAR-PLAN-0001.md) | warning | Annotation not testable |
+| [VAR-PLAN-0002](VAR-PLAN-0002.md) | warning | Regex sample not derivable |
+| [VAR-PLAN-0003](VAR-PLAN-0003.md) | error | Manifest parse error |
+| [VAR-PLAN-0004](VAR-PLAN-0004.md) | warning | Wildcard host substituted |
+| [VAR-PLAN-0005](VAR-PLAN-0005.md) | warning | Rule without host |
+| [VAR-PLAN-0006](VAR-PLAN-0006.md) | warning | Host-wide regex scope |
 | [VAR-RUN-0001](VAR-RUN-0001.md) | error | Unsupported method |

@@ -1,0 +1,55 @@
+# Source: https://kubernetes.io/blog/2026/02/27/ingress-nginx-before-you-migrate
+# Anonymized edge Ingress: wildcard host, annotations varco cannot test
+# black-box (canary, timeouts, an annotation unknown to varco), a rule without a
+# host, and a regex path whose sample cannot be derived without guessing.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: edge
+  name: wildcard
+  annotations:
+    nginx.ingress.kubernetes.io/canary: "true"
+    nginx.ingress.kubernetes.io/canary-weight: "10"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/shield-routing: "on"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: "*.example.com"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: edge
+                port:
+                  number: 80
+    - http:
+        paths:
+          - path: /no-host
+            pathType: Prefix
+            backend:
+              service:
+                name: edge
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: edge
+  name: tricky-regex
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: tricky.example.com
+      http:
+        paths:
+          - path: /v[0-9]{1,3}/items/(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: items
+                port:
+                  number: 80

@@ -1,0 +1,18 @@
+# Directory walk input: found in a nested directory, planned for its .json extension.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: walk
+  name: gamma
+spec:
+  rules:
+    - host: gamma.example.com
+      http:
+        paths:
+          - path: /gamma
+            pathType: Prefix
+            backend:
+              service:
+                name: gamma
+                port:
+                  number: 80

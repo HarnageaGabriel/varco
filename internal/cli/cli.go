@@ -29,12 +29,13 @@ Commands:
   version    print build version
   help       show this help
   diff       compare two endpoints
-  plan       create a probe plan (not implemented)
+  plan       derive probe cases from Ingress manifests
   run        execute a probe plan (not implemented)
 `
 
-// Run executes args and returns a documented process exit code.
-func Run(args []string, stdout, stderr io.Writer) int {
+// Run executes args and returns a documented process exit code. stdin is only
+// read by commands that accept a stream, such as `plan -f -`.
+func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		_, _ = fmt.Fprint(stderr, usage)
 		return 2
@@ -52,7 +53,9 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runVersion(args[1:], stdout, stderr)
 	case "diff":
 		return runDiff(args[1:], stdout, stderr)
-	case "plan", "run":
+	case "plan":
+		return runPlan(args[1:], stdin, stdout, stderr)
+	case "run":
 		_, _ = fmt.Fprintf(stderr, "%s: not implemented\n", args[0])
 		return 2
 	default:

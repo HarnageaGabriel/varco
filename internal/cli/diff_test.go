@@ -82,7 +82,7 @@ func TestRunDiff(t *testing.T) {
 				args = []string{"diff"}
 			}
 			var stdout, stderr bytes.Buffer
-			if got := Run(args, &stdout, &stderr); got != test.wantCode {
+			if got := Run(args, stdin(), &stdout, &stderr); got != test.wantCode {
 				t.Fatalf("Run() = %d, want %d; stderr=%q", got, test.wantCode, stderr.String())
 			}
 			if !strings.Contains(stdout.String(), test.wantStdout) {
@@ -100,7 +100,7 @@ func TestRunDiffJSONValid(t *testing.T) {
 	defer a.Close()
 	defer c.Close()
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"diff", "--scheme", "http", "--host", "h", "--rate", "1000", "--format", "json", "--old", a.Listener.Addr().String(), "--new", c.Listener.Addr().String(), "/", "/x"}, &stdout, &stderr)
+	code := Run([]string{"diff", "--scheme", "http", "--host", "h", "--rate", "1000", "--format", "json", "--old", a.Listener.Addr().String(), "--new", c.Listener.Addr().String(), "/", "/x"}, stdin(), &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("code %d %s", code, stderr.String())
 	}
@@ -132,7 +132,7 @@ func TestRunDiffIgnoresTransportNoise(t *testing.T) {
 	defer withLength.Close()
 	defer chunked.Close()
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"diff", "--scheme", "http", "--host", "h", "--rate", "1000", "--old", withLength.Listener.Addr().String(), "--new", chunked.Listener.Addr().String()}, &stdout, &stderr)
+	code := Run([]string{"diff", "--scheme", "http", "--host", "h", "--rate", "1000", "--old", withLength.Listener.Addr().String(), "--new", chunked.Listener.Addr().String()}, stdin(), &stdout, &stderr)
 	if code != 0 || !strings.Contains(stdout.String(), "identical") {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -151,7 +151,7 @@ func TestRunDiffPathOrderDeterministic(t *testing.T) {
 	run := func(paths ...string) string {
 		args := append([]string{"diff", "--scheme", "http", "--host", "h", "--rate", "1000", "--format", "json", "--old", a.Listener.Addr().String(), "--new", b.Listener.Addr().String()}, paths...)
 		var stdout, stderr bytes.Buffer
-		if code := Run(args, &stdout, &stderr); code != 1 {
+		if code := Run(args, stdin(), &stdout, &stderr); code != 1 {
 			t.Fatalf("code=%d stderr=%q", code, stderr.String())
 		}
 		return stdout.String()
@@ -184,7 +184,7 @@ func TestRunDiffContinuesAfterProbeFailure(t *testing.T) {
 	defer old.Close()
 	defer broken.Close()
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"diff", "--scheme", "http", "--host", "h", "--rate", "1000", "--old", old.Listener.Addr().String(), "--new", broken.Listener.Addr().String(), "/bad", "/ok"}, &stdout, &stderr)
+	code := Run([]string{"diff", "--scheme", "http", "--host", "h", "--rate", "1000", "--old", old.Listener.Addr().String(), "--new", broken.Listener.Addr().String(), "/bad", "/ok"}, stdin(), &stdout, &stderr)
 	if code != 3 || !strings.Contains(stderr.String(), "VAR-NET-0001") || !strings.Contains(stderr.String(), "/bad") || okHits.Load() != 1 {
 		t.Fatalf("code=%d okHits=%d stderr=%q", code, okHits.Load(), stderr.String())
 	}
@@ -199,7 +199,7 @@ func TestRunDiffHTTPS(t *testing.T) {
 	defer server.Close()
 	addr := server.Listener.Addr().String()
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"diff", "--host", "app.example", "--sni", "edge.example", "--rate", "1000", "--old", addr, "--new", addr, "/"}, &stdout, &stderr)
+	code := Run([]string{"diff", "--host", "app.example", "--sni", "edge.example", "--rate", "1000", "--old", addr, "--new", addr, "/"}, stdin(), &stdout, &stderr)
 	if code != 0 || sni.Load() != "edge.example" {
 		t.Fatalf("code=%d sni=%v stderr=%q", code, sni.Load(), stderr.String())
 	}
@@ -216,7 +216,7 @@ func TestRunDiffDefaultSNIStripsHostPort(t *testing.T) {
 	defer server.Close()
 	addr := server.Listener.Addr().String()
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"diff", "--host", "app.example:8443", "--rate", "1000", "--old", addr, "--new", addr}, &stdout, &stderr)
+	code := Run([]string{"diff", "--host", "app.example:8443", "--rate", "1000", "--old", addr, "--new", addr}, stdin(), &stdout, &stderr)
 	if code != 0 || sni.Load() != "app.example" {
 		t.Fatalf("code=%d sni=%v stderr=%q", code, sni.Load(), stderr.String())
 	}
@@ -225,7 +225,7 @@ func TestRunDiffDefaultSNIStripsHostPort(t *testing.T) {
 func TestRunDiffInvalidPathIsRedacted(t *testing.T) {
 	const secret = "token=super-secret"
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"diff", "--old", "127.0.0.1", "--new", "127.0.0.2", "--host", "h", "/bad path?" + secret}, &stdout, &stderr)
+	code := Run([]string{"diff", "--old", "127.0.0.1", "--new", "127.0.0.2", "--host", "h", "/bad path?" + secret}, stdin(), &stdout, &stderr)
 	if code != 2 || strings.Contains(stderr.String(), secret) || !strings.Contains(stderr.String(), "length") {
 		t.Fatalf("code=%d stderr=%q", code, stderr.String())
 	}
@@ -235,7 +235,7 @@ func TestRunDiffInvalidPathIsRedacted(t *testing.T) {
 func TestRunHelpFlagsExitZero(t *testing.T) {
 	for _, args := range [][]string{{"diff", "-h"}, {"diff", "--help"}, {"version", "-h"}} {
 		var stdout, stderr bytes.Buffer
-		if code := Run(args, &stdout, &stderr); code != 0 || !strings.Contains(stderr.String(), "Usage") {
+		if code := Run(args, stdin(), &stdout, &stderr); code != 0 || !strings.Contains(stderr.String(), "Usage") {
 			t.Fatalf("%v: code=%d stderr=%q", args, code, stderr.String())
 		}
 	}

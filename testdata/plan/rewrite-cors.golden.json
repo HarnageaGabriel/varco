@@ -1,0 +1,239 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "ca75167f2e3b",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "//cart",
+      "family": "double-slash",
+      "source": {
+        "ingress": "shop/catalog",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "repeated slashes are normalized or answered with 301 (blog behavior 5); rewrite-target rewrites the upstream path (blog behavior 3); rewrite-target capture groups enable regex matching for the whole host"
+    },
+    {
+      "id": "e1721265aa4a",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "//catalog/varco-probe",
+      "family": "double-slash",
+      "source": {
+        "ingress": "shop/catalog",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "repeated slashes are normalized or answered with 301 (blog behavior 5); pathType ImplementationSpecific is treated as a Prefix-like match; path \"/catalog(/|$)(.*)\" is a regex and is sampled as \"/catalog/varco-probe\"; rewrite-target rewrites the upstream path (blog behavior 3); rewrite-target capture groups enable regex matching for the whole host"
+    },
+    {
+      "id": "44c0217cdb6f",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/CART",
+      "family": "case-flip",
+      "source": {
+        "ingress": "shop/catalog",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "use-regex or rewrite-target makes matching case-insensitive (blog behaviors 1 to 3); rewrite-target rewrites the upstream path (blog behavior 3); rewrite-target capture groups enable regex matching for the whole host"
+    },
+    {
+      "id": "f6c5950b1e5a",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/CATALOG/VARCO-PROBE",
+      "family": "case-flip",
+      "source": {
+        "ingress": "shop/catalog",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "use-regex or rewrite-target makes matching case-insensitive (blog behaviors 1 to 3); pathType ImplementationSpecific is treated as a Prefix-like match; path \"/catalog(/|$)(.*)\" is a regex and is sampled as \"/catalog/varco-probe\"; rewrite-target rewrites the upstream path (blog behavior 3); rewrite-target capture groups enable regex matching for the whole host"
+    },
+    {
+      "id": "ebee16594702",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/cart",
+      "family": "rewrite",
+      "source": {
+        "ingress": "shop/catalog",
+        "rule": 0,
+        "path": 1,
+        "annotation": "nginx.ingress.kubernetes.io/rewrite-target"
+      },
+      "note": "rewrite-target rewrites the upstream path (blog behavior 3); rewrite-target capture groups enable regex matching for the whole host"
+    },
+    {
+      "id": "944a55d22dd1",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "OPTIONS",
+      "path": "/cart",
+      "headers": [
+        {
+          "name": "Access-Control-Request-Headers",
+          "values": [
+            "X-Request-Id, X-Tenant"
+          ]
+        },
+        {
+          "name": "Access-Control-Request-Method",
+          "values": [
+            "GET"
+          ]
+        },
+        {
+          "name": "Origin",
+          "values": [
+            "https://varco.invalid"
+          ]
+        }
+      ],
+      "family": "cors-preflight",
+      "source": {
+        "ingress": "shop/catalog",
+        "rule": 0,
+        "path": 1,
+        "annotation": "nginx.ingress.kubernetes.io/enable-cors"
+      },
+      "note": "enable-cors answers an OPTIONS preflight; rewrite-target rewrites the upstream path (blog behavior 3); rewrite-target capture groups enable regex matching for the whole host"
+    },
+    {
+      "id": "305a6a49b7be",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/cart/varco-probe",
+      "family": "rewrite",
+      "source": {
+        "ingress": "shop/catalog",
+        "rule": 0,
+        "path": 1,
+        "annotation": "nginx.ingress.kubernetes.io/rewrite-target"
+      },
+      "note": "rewrite-target rewrites the upstream path (blog behavior 3); rewrite-target capture groups enable regex matching for the whole host"
+    },
+    {
+      "id": "4b2a0f09e88d",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/cartvarco",
+      "family": "prefix-boundary",
+      "source": {
+        "ingress": "shop/catalog",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "with use-regex the path is matched as a prefix regex, so /api may match /apivarco (blog behavior 1); rewrite-target rewrites the upstream path (blog behavior 3); rewrite-target capture groups enable regex matching for the whole host"
+    },
+    {
+      "id": "6ea7882c84c9",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/catalog/varco-probe",
+      "family": "rewrite",
+      "source": {
+        "ingress": "shop/catalog",
+        "rule": 0,
+        "path": 0,
+        "annotation": "nginx.ingress.kubernetes.io/rewrite-target"
+      },
+      "note": "pathType ImplementationSpecific is treated as a Prefix-like match; path \"/catalog(/|$)(.*)\" is a regex and is sampled as \"/catalog/varco-probe\"; rewrite-target rewrites the upstream path (blog behavior 3); rewrite-target capture groups enable regex matching for the whole host"
+    },
+    {
+      "id": "f78802175506",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "OPTIONS",
+      "path": "/catalog/varco-probe",
+      "headers": [
+        {
+          "name": "Access-Control-Request-Headers",
+          "values": [
+            "X-Request-Id, X-Tenant"
+          ]
+        },
+        {
+          "name": "Access-Control-Request-Method",
+          "values": [
+            "GET"
+          ]
+        },
+        {
+          "name": "Origin",
+          "values": [
+            "https://varco.invalid"
+          ]
+        }
+      ],
+      "family": "cors-preflight",
+      "source": {
+        "ingress": "shop/catalog",
+        "rule": 0,
+        "path": 0,
+        "annotation": "nginx.ingress.kubernetes.io/enable-cors"
+      },
+      "note": "enable-cors answers an OPTIONS preflight; pathType ImplementationSpecific is treated as a Prefix-like match; path \"/catalog(/|$)(.*)\" is a regex and is sampled as \"/catalog/varco-probe\"; rewrite-target rewrites the upstream path (blog behavior 3); rewrite-target capture groups enable regex matching for the whole host"
+    },
+    {
+      "id": "87f18bd5d510",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco/../cart",
+      "family": "dot-segments",
+      "source": {
+        "ingress": "shop/catalog",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "dot segments are resolved before matching (blog behavior 5); rewrite-target rewrites the upstream path (blog behavior 3); rewrite-target capture groups enable regex matching for the whole host"
+    },
+    {
+      "id": "0874a638ad11",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco/../catalog/varco-probe",
+      "family": "dot-segments",
+      "source": {
+        "ingress": "shop/catalog",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "dot segments are resolved before matching (blog behavior 5); pathType ImplementationSpecific is treated as a Prefix-like match; path \"/catalog(/|$)(.*)\" is a regex and is sampled as \"/catalog/varco-probe\"; rewrite-target rewrites the upstream path (blog behavior 3); rewrite-target capture groups enable regex matching for the whole host"
+    }
+  ],
+  "unsupported": [
+    {
+      "code": "VAR-PLAN-0001",
+      "ingress": "shop/catalog",
+      "annotation": "nginx.ingress.kubernetes.io/auth-type",
+      "message": "annotation nginx.ingress.kubernetes.io/auth-type cannot be tested black-box by varco"
+    },
+    {
+      "code": "VAR-PLAN-0001",
+      "ingress": "shop/catalog",
+      "annotation": "nginx.ingress.kubernetes.io/proxy-body-size",
+      "message": "annotation nginx.ingress.kubernetes.io/proxy-body-size cannot be tested black-box by varco"
+    }
+  ],
+  "warnings": [
+    {
+      "code": "VAR-PLAN-0006",
+      "ingress": "shop/catalog",
+      "message": "use-regex or rewrite-target on shop/catalog makes ingress-nginx match every path of host shop.example.com as a case-insensitive regex"
+    }
+  ]
+}

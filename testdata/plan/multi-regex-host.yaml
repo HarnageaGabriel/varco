@@ -1,0 +1,64 @@
+# Source: https://kubernetes.io/blog/2026/02/27/ingress-nginx-before-you-migrate
+# Blog behavior 2: use-regex on one Ingress makes every path of that host match
+# as a case-insensitive regex, including paths declared by other Ingresses.
+# Anonymized: prod checkout API on api.example.com.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: prod
+  name: checkout-api
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.example.com
+      secretName: api-example-tls
+  rules:
+    - host: api.example.com
+      http:
+        paths:
+          - path: /api/v1/items(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: checkout
+                port:
+                  number: 80
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: checkout
+                port:
+                  number: 80
+---
+# Second Ingress on the same host: no regex annotation of its own, but the host
+# is regex-matched because of the first Ingress (blog behavior 2).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: prod
+  name: checkout-header
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: api.example.com
+      http:
+        paths:
+          - path: ^/legacy
+            pathType: Exact
+            backend:
+              service:
+                name: legacy
+                port:
+                  number: 80
+          - path: /header
+            pathType: Exact
+            backend:
+              service:
+                name: checkout
+                port:
+                  number: 80

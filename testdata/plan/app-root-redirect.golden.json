@@ -1,0 +1,197 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "7da4af0411e2",
+      "host": "www.example.org",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/",
+      "family": "app-root",
+      "source": {
+        "ingress": "web/marketing",
+        "rule": 0,
+        "path": 0,
+        "annotation": "nginx.ingress.kubernetes.io/app-root"
+      },
+      "note": "app-root \"/home\" redirects / to the application root (source points at the Ingress first rule with a host)"
+    },
+    {
+      "id": "2105d53cf9eb",
+      "host": "www.example.org",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/",
+      "family": "base",
+      "source": {
+        "ingress": "web/marketing",
+        "rule": 0,
+        "path": 1
+      }
+    },
+    {
+      "id": "abd568c2280c",
+      "host": "www.example.org",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/",
+      "family": "redirect-annotation",
+      "source": {
+        "ingress": "web/marketing",
+        "rule": 0,
+        "path": 1,
+        "annotation": "nginx.ingress.kubernetes.io/permanent-redirect"
+      },
+      "note": "permanent-redirect answers with a redirect"
+    },
+    {
+      "id": "26d33dc2ce23",
+      "host": "www.example.org",
+      "scheme": "http",
+      "method": "GET",
+      "path": "//",
+      "family": "double-slash",
+      "source": {
+        "ingress": "web/marketing",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "repeated slashes are normalized or answered with 301 (blog behavior 5)"
+    },
+    {
+      "id": "250f43b2e394",
+      "host": "www.example.org",
+      "scheme": "http",
+      "method": "GET",
+      "path": "//landing",
+      "family": "double-slash",
+      "source": {
+        "ingress": "web/marketing",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "repeated slashes are normalized or answered with 301 (blog behavior 5); pathType ImplementationSpecific is treated as a Prefix-like match"
+    },
+    {
+      "id": "2461a93cc188",
+      "host": "www.example.org",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/landing",
+      "family": "base",
+      "source": {
+        "ingress": "web/marketing",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "pathType ImplementationSpecific is treated as a Prefix-like match"
+    },
+    {
+      "id": "2875d8f6ba7a",
+      "host": "www.example.org",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/landing",
+      "family": "redirect-annotation",
+      "source": {
+        "ingress": "web/marketing",
+        "rule": 0,
+        "path": 0,
+        "annotation": "nginx.ingress.kubernetes.io/permanent-redirect"
+      },
+      "note": "permanent-redirect answers with a redirect; pathType ImplementationSpecific is treated as a Prefix-like match"
+    },
+    {
+      "id": "fda42eb703a2",
+      "host": "www.example.org",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/landing/",
+      "family": "trailing-slash",
+      "source": {
+        "ingress": "web/marketing",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "ingress-nginx answers a missing trailing slash with 301 (blog behavior 4); pathType ImplementationSpecific is treated as a Prefix-like match"
+    },
+    {
+      "id": "6a04a66e3c22",
+      "host": "www.example.org",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/landing/varco-probe",
+      "family": "subpath",
+      "source": {
+        "ingress": "web/marketing",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "pathType ImplementationSpecific is treated as a Prefix-like match"
+    },
+    {
+      "id": "100d7e678521",
+      "host": "www.example.org",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/landingvarco",
+      "family": "prefix-boundary",
+      "source": {
+        "ingress": "web/marketing",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "Prefix matches by path element, so /api must not match /apivarco (blog behavior 1); pathType ImplementationSpecific is treated as a Prefix-like match"
+    },
+    {
+      "id": "75607943be79",
+      "host": "www.example.org",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco-probe",
+      "family": "subpath",
+      "source": {
+        "ingress": "web/marketing",
+        "rule": 0,
+        "path": 1
+      }
+    },
+    {
+      "id": "5d6c690ea8f2",
+      "host": "www.example.org",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco/../",
+      "family": "dot-segments",
+      "source": {
+        "ingress": "web/marketing",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "dot segments are resolved before matching (blog behavior 5)"
+    },
+    {
+      "id": "586ac4bbd11f",
+      "host": "www.example.org",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco/../landing",
+      "family": "dot-segments",
+      "source": {
+        "ingress": "web/marketing",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "dot segments are resolved before matching (blog behavior 5); pathType ImplementationSpecific is treated as a Prefix-like match"
+    }
+  ],
+  "unsupported": [
+    {
+      "code": "VAR-PLAN-0001",
+      "ingress": "web/marketing",
+      "annotation": "nginx.ingress.kubernetes.io/whitelist-source-range",
+      "message": "annotation nginx.ingress.kubernetes.io/whitelist-source-range cannot be tested black-box by varco"
+    }
+  ],
+  "warnings": []
+}

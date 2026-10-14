@@ -4,6 +4,8 @@ All notable changes are documented here. Format: [Keep a Changelog](https://keep
 
 ## [Unreleased]
 
+- Add `varco plan`: read Kubernetes Ingress manifests (files, directories, stdin, `kind: List`, multi-document YAML and JSON) and emit a deterministic JSON or table list of probe cases with stable IDs, plus the findings varco cannot test (`VAR-PLAN-0001`..`0006`). Adds `internal/ingress` (pure parser, `networking.k8s.io/v1` only, `extensions/v1beta1` rejected) and `internal/plan` (pure case generation: path families, host-wide regex scope, CORS preflight, redirects, TLS/SNI).
+
 - Add `varco diff`: probe two numeric IP endpoints and report status, redirect, security/CORS header, TLS, certificate and body differences (table or JSON), with `VAR-CMP-0001`..`0006` diagnostics.
 
 - Fix `varco diff` request handling: request targets are sent verbatim (no re-escaping of `%2F`, `?`, `//`), probes ignore proxies, do not decompress, accept TLS 1.0+, hash the whole body, and refuse CR/LF/control bytes, invalid header names/values, `Host`/`Content-Length`/`Transfer-Encoding`/`Trailer`/`Connection` headers and more credential headers (`X-Api-Key`, `X-Auth-Token`, `Private-Token`, `Api-Key`).
@@ -14,3 +16,4 @@ All notable changes are documented here. Format: [Keep a Changelog](https://keep
 - Add the diagnostic registry and generated diagnostic reference pages.
 - Add CI, dependency automation, security analysis, and release configuration.
 - Document exit codes, probe safety, endpoint syntax, and diagnostic code policy.
+
