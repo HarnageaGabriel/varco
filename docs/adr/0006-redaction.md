@@ -46,3 +46,8 @@ not include rejected header text.
 - `--show-sensitive` output must be handled as credential-bearing material.
 - Cookie value rotation no longer causes noise, while weaker or changed cookie
   attributes produce `VAR-CMP-0007`.
+
+## Known limits
+
+- Secrets carried in path segments (for example `/reset/<token>`) are not redacted: the path is what varco compares and reports.
+- Query keys are kept as written, so a secret used as a bare key (`/cb?<token>`) is printed. Use `--show-sensitive` only for local debugging.
