@@ -29,6 +29,8 @@ const (
 	CodeCompareCertificate Code = "VAR-CMP-0005"
 	// CodeCompareBody reports a response body mismatch.
 	CodeCompareBody Code = "VAR-CMP-0006"
+	// CodeCompareCookie reports a Set-Cookie attribute mismatch.
+	CodeCompareCookie Code = "VAR-CMP-0007"
 	// CodePlanAnnotationNotTestable reports an annotation varco cannot test black-box.
 	CodePlanAnnotationNotTestable Code = "VAR-PLAN-0001"
 	// CodePlanRegexSample reports a regex path varco cannot sample.
@@ -129,6 +131,7 @@ func List() []Entry {
 		{Code: CodeCompareTLSVersion, Area: "CMP", Title: "TLS version differs", Severity: SeverityInfo, Description: "The endpoints negotiated different TLS protocol versions.", Remediation: "Review the TLS configuration on both endpoints."},
 		{Code: CodeCompareCertificate, Area: "CMP", Title: "Certificate differs", Severity: SeverityInfo, Description: "A compared leaf certificate field differs between endpoints.", Remediation: "Confirm that the certificate change is expected."},
 		{Code: CodeCompareBody, Area: "CMP", Title: "Body differs", Severity: SeverityInfo, Description: "The response body hash, captured size, or truncation state differs.", Remediation: "Review the response content returned by each endpoint."},
+		{Code: CodeCompareCookie, Area: "CMP", Title: "Cookie attributes differ", Severity: SeverityInfo, Description: "The endpoints set different cookie names or cookie security and scope attributes. Cookie values are never compared or reported.", Remediation: "Align the Set-Cookie attributes, or confirm that the difference is expected."},
 		{Code: CodeInvalidFlag, Area: "CFG", Title: "Invalid flag", Severity: SeverityError, Description: "A command-line flag is unknown or has an invalid value.", Remediation: "Correct the flag name or value and retry."},
 		{Code: CodeEndpointUnreachable, Area: "NET", Title: "Endpoint unreachable", Severity: SeverityError, Description: "The probe could not connect to the configured endpoint.", Remediation: "Verify the endpoint address, port, and network reachability."},
 		{Code: CodeUnsupportedMethod, Area: "RUN", Title: "Unsupported method", Severity: SeverityError, Description: "The requested HTTP method is not enabled for this run.", Remediation: "Use GET, HEAD, or OPTIONS, or explicitly opt in to the method for this case and run."},

@@ -1,3 +1,4 @@
-PATH  CODE          FIELD                   OLD   NEW
-/     VAR-CMP-0001  status                  200   404
-/a    VAR-CMP-0003  header.x-frame-options  DENY  
+PATH    CODE          FIELD                   OLD                NEW
+/       VAR-CMP-0001  status                  200                404
+/oauth  VAR-CMP-0002  header.location         /cb?code=REDACTED  /cb?code=REDACTED (query values differ)
+/a      VAR-CMP-0003  header.x-frame-options  DENY               (absent)

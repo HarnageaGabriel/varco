@@ -129,6 +129,28 @@ func TestDoRejectsOversizeHeader(t *testing.T) {
 	}
 }
 
+func TestDoResponseParseErrorDoesNotExposeHeaderValue(t *testing.T) {
+	const secret = "header-super-secret"
+	request, cleanup := rawListener(t, func(conn net.Conn) {
+		_, _ = io.WriteString(conn, "HTTP/1.1 200 OK\r\nX-Test: "+secret+"\x00\r\n\r\n")
+	})
+	defer cleanup()
+	if _, err := Do(context.Background(), request); err == nil || strings.Contains(err.Error(), secret) || !strings.Contains(err.Error(), "invalid HTTP response") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestDoTrailerParseErrorDoesNotExposeHeaderValue(t *testing.T) {
+	const secret = "trailer-super-secret"
+	request, cleanup := rawListener(t, func(conn net.Conn) {
+		_, _ = io.WriteString(conn, "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nTrailer: X-Test\r\n\r\n0\r\nX-Test: "+secret+"\x00\r\n\r\n")
+	})
+	defer cleanup()
+	if _, err := Do(context.Background(), request); err == nil || strings.Contains(err.Error(), secret) || !strings.Contains(err.Error(), "invalid HTTP response body") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 func TestDoInvalidPathErrorIsRedacted(t *testing.T) {
 	const secret = "token=super-secret"
 	request := Request{Scheme: "http", Host: "h", Method: "GET", Path: "/bad path?" + secret}

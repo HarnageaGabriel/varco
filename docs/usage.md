@@ -21,7 +21,7 @@ varco plan -f - --format json < ingress.yaml
 
 Sends the same request to two numeric IP endpoints and reports differences. `--old` and `--new` accept `IP`, `IPv4:port` or `[IPv6]:port`; hostnames are rejected (`VAR-CFG-0001`). `--host` sets the Host header. `--sni` accepts a hostname or IP address without a port and defaults to the hostname/IP portion of `--host`. Redirects are never followed. Exit codes: see [exit-codes.md](exit-codes.md).
 
-Flags: `--old --new --host --sni --scheme (http|https) --method --header NAME=VALUE --timeout --rate --ignore-header --format (table|json) --allow-unsafe-methods`. Positional arguments are paths (default `/`). Request headers `Authorization`, `Cookie` and `Proxy-Authorization` are refused.
+Flags: `--old --new --host --sni --scheme (http|https) --method --header NAME=VALUE --timeout --rate --ignore-header --format (table|json) --allow-unsafe-methods --show-sensitive`. Positional arguments are paths (default `/`). Request headers `Authorization`, `Cookie` and `Proxy-Authorization` are refused.
 
 ### Request and endpoint rules
 
@@ -34,7 +34,9 @@ Flags: `--old --new --host --sni --scheme (http|https) --method --header NAME=VA
 - Response trailers are compared as headers named `Trailer:<Name>`.
 - Multi-valued response headers are compared value by value, in order; an absent header differs from an empty one (`(absent)` in output).
 - If a probe fails for some path, the remaining paths are still compared, failures are listed on stderr as `VAR-NET-0001`, and the exit code is 3 (it wins over 1).
-- `Location` values are printed verbatim, including query strings: they can contain tokens, so treat reports as sensitive. Query redaction may come later as an opt-in flag.
+- `Location` values are redacted by default: query keys and order remain visible, every query value becomes `REDACTED`, fragments become `REDACTED`, and URL userinfo becomes `REDACTED@`. The raw values are still compared, so redirects that differ only in hidden values remain differences. `--show-sensitive` prints raw Location values and emits a warning to stderr.
+- JSON diff reports include top-level `"redacted": true` by default and `false` with `--show-sensitive`; `schema_version` remains 1.
+- `Set-Cookie` compares cookie names and the `Secure`, `HttpOnly`, `SameSite`, `Path`, `Domain`, `Max-Age` presence, `Expires` presence and `Partitioned` attributes. Cookie values are never compared or printed. Attribute differences use `VAR-CMP-0007`.
 - `-h`/`--help` prints flag help and exits 0.
 
 ### Example 1: one route, table output
@@ -56,5 +58,4 @@ varco diff --scheme http --old 10.0.0.1:8080 --new 10.0.0.2:8080 --host api.exam
 varco diff --old 10.0.0.1 --new 10.0.0.2 --host api.example.com --sni edge.example.com /
 ```
 
-Ignored by default: Date, Server, Via, X-Request-Id, Set-Cookie values, and Content-Length when chunked. VERIFY: these are simply not part of the compared field set.
-
+Ignored by default: Date, Server, Via, X-Request-Id, Set-Cookie values (attributes are compared), and Content-Length when chunked. VERIFY: these are simply not part of the compared field set.

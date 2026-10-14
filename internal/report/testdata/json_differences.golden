@@ -1,5 +1,6 @@
 {
   "schema_version": 1,
+  "redacted": true,
   "identical": false,
   "differences": [
     {
@@ -10,11 +11,18 @@
       "new": "404"
     },
     {
+      "path": "/oauth",
+      "code": "VAR-CMP-0002",
+      "field": "header.location",
+      "old": "/cb?code=REDACTED",
+      "new": "/cb?code=REDACTED (query values differ)"
+    },
+    {
       "path": "/a",
       "code": "VAR-CMP-0003",
       "field": "header.x-frame-options",
       "old": "DENY",
-      "new": ""
+      "new": "(absent)"
     }
   ]
 }

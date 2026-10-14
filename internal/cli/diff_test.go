@@ -107,9 +107,10 @@ func TestRunDiffJSONValid(t *testing.T) {
 	}
 	var doc struct {
 		SchemaVersion int  `json:"schema_version"`
+		Redacted      bool `json:"redacted"`
 		Identical     bool `json:"identical"`
 	}
-	if err := json.Unmarshal(stdout.Bytes(), &doc); err != nil || doc.SchemaVersion != 1 || doc.Identical {
+	if err := json.Unmarshal(stdout.Bytes(), &doc); err != nil || doc.SchemaVersion != 1 || !doc.Redacted || doc.Identical {
 		t.Fatalf("doc %+v err %v", doc, err)
 	}
 }
@@ -124,8 +125,7 @@ func TestRunDiffIgnoresTransportNoise(t *testing.T) {
 		_, _ = w.Write([]byte(body))
 	}))
 	chunked := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Add("Set-Cookie", "session=two; Path=/")
-		w.Header().Add("Set-Cookie", "extra=1")
+		w.Header().Add("Set-Cookie", "session=two")
 		_, _ = w.Write([]byte(body[:100]))
 		w.(http.Flusher).Flush()
 		_, _ = w.Write([]byte(body[100:]))
@@ -173,7 +173,7 @@ func TestRunDiffContinuesAfterProbeFailure(t *testing.T) {
 		_, _ = w.Write([]byte("same"))
 	}))
 	broken := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.RequestURI == "/bad" {
+		if r.RequestURI == "/bad?token=super-secret" {
 			conn, _, err := w.(http.Hijacker).Hijack()
 			if err == nil {
 				_ = conn.Close()
@@ -185,10 +185,51 @@ func TestRunDiffContinuesAfterProbeFailure(t *testing.T) {
 	defer old.Close()
 	defer broken.Close()
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"diff", "--scheme", "http", "--host", "h", "--rate", "1000", "--old", old.Listener.Addr().String(), "--new", broken.Listener.Addr().String(), "/bad", "/ok"}, stdin(), &stdout, &stderr)
-	if code != 3 || !strings.Contains(stderr.String(), "VAR-NET-0001") || !strings.Contains(stderr.String(), "/bad") || okHits.Load() != 1 {
+	code := Run([]string{"diff", "--scheme", "http", "--host", "h", "--rate", "1000", "--old", old.Listener.Addr().String(), "--new", broken.Listener.Addr().String(), "/bad?token=super-secret", "/ok"}, stdin(), &stdout, &stderr)
+	if code != 3 || !strings.Contains(stderr.String(), "VAR-NET-0001") || strings.Contains(stderr.String(), "super-secret") || !strings.Contains(stderr.String(), "path of length") || okHits.Load() != 1 {
 		t.Fatalf("code=%d okHits=%d stderr=%q", code, okHits.Load(), stderr.String())
 	}
+}
+
+// Source: RFC 6749 section 4.1.2: an OAuth authorization code can be carried
+// in a Location query value and must not reach output without explicit opt-in.
+func TestRunDiffRedactsLocationUnlessOptedIn(t *testing.T) {
+	server := func(location string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Location", location)
+			w.WriteHeader(http.StatusFound)
+		}))
+	}
+	oldServer := server("/cb?code=old-super-secret")
+	newServer := server("/cb?code=new-super-secret")
+	defer oldServer.Close()
+	defer newServer.Close()
+	base := []string{"diff", "--scheme", "http", "--host", "h", "--rate", "1000", "--old", oldServer.Listener.Addr().String(), "--new", newServer.Listener.Addr().String()}
+
+	for _, format := range []string{"table", "json"} {
+		t.Run(format+" default", func(t *testing.T) {
+			args := append(append([]string(nil), base...), "--format", format)
+			var stdout, stderr bytes.Buffer
+			if code := Run(args, stdin(), &stdout, &stderr); code != 1 {
+				t.Fatalf("code=%d stderr=%q", code, stderr.String())
+			}
+			combined := stdout.String() + stderr.String()
+			if strings.Contains(combined, "old-super-secret") || strings.Contains(combined, "new-super-secret") || !strings.Contains(stdout.String(), "REDACTED") || stderr.Len() != 0 {
+				t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
+			}
+		})
+	}
+
+	t.Run("show sensitive", func(t *testing.T) {
+		args := append(append([]string(nil), base...), "--show-sensitive")
+		var stdout, stderr bytes.Buffer
+		if code := Run(args, stdin(), &stdout, &stderr); code != 1 {
+			t.Fatalf("code=%d stderr=%q", code, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "old-super-secret") || !strings.Contains(stdout.String(), "new-super-secret") || strings.Count(stderr.String(), "\n") != 1 || !strings.Contains(stderr.String(), "warning:") {
+			t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
+		}
+	})
 }
 
 // Source: net/http/httptest NewTLSServer; end-to-end HTTPS path including SNI/cert capture.

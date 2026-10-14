@@ -20,6 +20,7 @@ func TestRegistry(t *testing.T) {
 		{CodeCompareTLSVersion, "CMP", SeverityInfo},
 		{CodeCompareCertificate, "CMP", SeverityInfo},
 		{CodeCompareBody, "CMP", SeverityInfo},
+		{CodeCompareCookie, "CMP", SeverityInfo},
 	}
 
 	for _, test := range tests {

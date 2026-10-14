@@ -11,6 +11,7 @@
 | [VAR-CMP-0004](VAR-CMP-0004.md) | info | TLS version differs |
 | [VAR-CMP-0005](VAR-CMP-0005.md) | info | Certificate differs |
 | [VAR-CMP-0006](VAR-CMP-0006.md) | info | Body differs |
+| [VAR-CMP-0007](VAR-CMP-0007.md) | info | Cookie attributes differ |
 | [VAR-NET-0001](VAR-NET-0001.md) | error | Endpoint unreachable |
 | [VAR-PLAN-0001](VAR-PLAN-0001.md) | warning | Annotation not testable |
 | [VAR-PLAN-0002](VAR-PLAN-0002.md) | warning | Regex sample not derivable |
