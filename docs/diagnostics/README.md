@@ -5,5 +5,11 @@
 | Code | Severity | Title |
 |---|---|---|
 | [VAR-CFG-0001](VAR-CFG-0001.md) | error | Invalid flag |
+| [VAR-CMP-0001](VAR-CMP-0001.md) | info | Status differs |
+| [VAR-CMP-0002](VAR-CMP-0002.md) | info | Location differs |
+| [VAR-CMP-0003](VAR-CMP-0003.md) | info | Header differs |
+| [VAR-CMP-0004](VAR-CMP-0004.md) | info | TLS version differs |
+| [VAR-CMP-0005](VAR-CMP-0005.md) | info | Certificate differs |
+| [VAR-CMP-0006](VAR-CMP-0006.md) | info | Body differs |
 | [VAR-NET-0001](VAR-NET-0001.md) | error | Endpoint unreachable |
 | [VAR-RUN-0001](VAR-RUN-0001.md) | error | Unsupported method |

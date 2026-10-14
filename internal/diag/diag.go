@@ -17,6 +17,18 @@ const (
 	CodeEndpointUnreachable Code = "VAR-NET-0001"
 	// CodeUnsupportedMethod reports an unsafe or unsupported HTTP method.
 	CodeUnsupportedMethod Code = "VAR-RUN-0001"
+	// CodeCompareStatus reports an HTTP status mismatch.
+	CodeCompareStatus Code = "VAR-CMP-0001"
+	// CodeCompareLocation reports a redirect location mismatch.
+	CodeCompareLocation Code = "VAR-CMP-0002"
+	// CodeCompareHeader reports a security or CORS header mismatch.
+	CodeCompareHeader Code = "VAR-CMP-0003"
+	// CodeCompareTLSVersion reports a TLS protocol mismatch.
+	CodeCompareTLSVersion Code = "VAR-CMP-0004"
+	// CodeCompareCertificate reports a leaf certificate mismatch.
+	CodeCompareCertificate Code = "VAR-CMP-0005"
+	// CodeCompareBody reports a response body mismatch.
+	CodeCompareBody Code = "VAR-CMP-0006"
 )
 
 // Severity is a diagnostic impact level.
@@ -95,6 +107,12 @@ func Lookup(code Code) (Entry, bool) {
 // List returns registry entries sorted by code.
 func List() []Entry {
 	entries := []Entry{
+		{Code: CodeCompareStatus, Area: "CMP", Title: "Status differs", Severity: SeverityInfo, Description: "The endpoints returned different HTTP status codes.", Remediation: "Confirm that routing and application behavior are equivalent."},
+		{Code: CodeCompareLocation, Area: "CMP", Title: "Location differs", Severity: SeverityInfo, Description: "The endpoints returned different Location header values.", Remediation: "Confirm that redirect targets are equivalent."},
+		{Code: CodeCompareHeader, Area: "CMP", Title: "Header differs", Severity: SeverityInfo, Description: "A security or CORS response header differs between endpoints.", Remediation: "Align the response header policy or explicitly ignore the header."},
+		{Code: CodeCompareTLSVersion, Area: "CMP", Title: "TLS version differs", Severity: SeverityInfo, Description: "The endpoints negotiated different TLS protocol versions.", Remediation: "Review the TLS configuration on both endpoints."},
+		{Code: CodeCompareCertificate, Area: "CMP", Title: "Certificate differs", Severity: SeverityInfo, Description: "A compared leaf certificate field differs between endpoints.", Remediation: "Confirm that the certificate change is expected."},
+		{Code: CodeCompareBody, Area: "CMP", Title: "Body differs", Severity: SeverityInfo, Description: "The response body hash, captured size, or truncation state differs.", Remediation: "Review the response content returned by each endpoint."},
 		{Code: CodeInvalidFlag, Area: "CFG", Title: "Invalid flag", Severity: SeverityError, Description: "A command-line flag is unknown or has an invalid value.", Remediation: "Correct the flag name or value and retry."},
 		{Code: CodeEndpointUnreachable, Area: "NET", Title: "Endpoint unreachable", Severity: SeverityError, Description: "The probe could not connect to the configured endpoint.", Remediation: "Verify the endpoint address, port, and network reachability."},
 		{Code: CodeUnsupportedMethod, Area: "RUN", Title: "Unsupported method", Severity: SeverityError, Description: "The requested HTTP method is not enabled for this run.", Remediation: "Use GET, HEAD, or OPTIONS, or explicitly opt in to the method for this case and run."},

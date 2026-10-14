@@ -14,6 +14,12 @@ func TestRegistry(t *testing.T) {
 		{CodeInvalidFlag, "CFG", SeverityError},
 		{CodeEndpointUnreachable, "NET", SeverityError},
 		{CodeUnsupportedMethod, "RUN", SeverityError},
+		{CodeCompareStatus, "CMP", SeverityInfo},
+		{CodeCompareLocation, "CMP", SeverityInfo},
+		{CodeCompareHeader, "CMP", SeverityInfo},
+		{CodeCompareTLSVersion, "CMP", SeverityInfo},
+		{CodeCompareCertificate, "CMP", SeverityInfo},
+		{CodeCompareBody, "CMP", SeverityInfo},
 	}
 
 	for _, test := range tests {

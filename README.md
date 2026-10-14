@@ -6,13 +6,13 @@ varco derives test cases from your Ingress resources, sends the same request (sa
 
 > Status: pre-alpha, design phase. Nothing below works yet.
 
-## Try it now (planned for v0.1)
+## Try it now
 
 ```sh
 varco diff --old 10.0.0.1 --new 10.0.0.2 --host api.example.com /
 ```
 
-Compares one route on two endpoints, without cluster access.
+Compares one route on two numeric IP endpoints, without cluster access. Exit code 0 means identical, 1 differences, 2 usage error, 3 network error. See [docs/usage.md](docs/usage.md).
 
 ## Principles
 

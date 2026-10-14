@@ -1,0 +1,3 @@
+PATH  CODE          FIELD                   OLD   NEW
+/     VAR-CMP-0001  status                  200   404
+/a    VAR-CMP-0003  header.x-frame-options  DENY  
