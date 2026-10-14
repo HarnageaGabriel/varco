@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -175,6 +176,78 @@ func TestPlanManifestErrors(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestWalkableManifest covers fix H's walk filter: only regular files with a
+// manifest extension are read from a directory.
+func TestWalkableManifest(t *testing.T) {
+	tests := []struct {
+		name string
+		mode fs.FileMode
+		want bool
+	}{
+		{name: "a.yaml", want: true},
+		{name: "a.yml", want: true},
+		{name: "a.json", want: true},
+		{name: "a.txt", want: false},
+		{name: "a.yaml", mode: fs.ModeDir, want: false},
+		{name: "a.yaml", mode: fs.ModeSymlink, want: false},
+		{name: "a.yaml", mode: fs.ModeNamedPipe, want: false},
+	}
+	for _, test := range tests {
+		if got := walkableManifest(fakeDirEntry{name: test.name, mode: test.mode}); got != test.want {
+			t.Fatalf("walkableManifest(%q, %v) = %v, want %v", test.name, test.mode, got, test.want)
+		}
+	}
+}
+
+type fakeDirEntry struct {
+	name string
+	mode fs.FileMode
+}
+
+func (f fakeDirEntry) Name() string               { return f.name }
+func (f fakeDirEntry) IsDir() bool                { return f.mode.IsDir() }
+func (f fakeDirEntry) Type() fs.FileMode          { return f.mode.Type() }
+func (f fakeDirEntry) Info() (fs.FileInfo, error) { return nil, nil }
+
+// TestPlanRejectsOversizedFile covers fix H: an input larger than the 8 MiB cap
+// is a VAR-PLAN-0003 error, not a partial plan.
+func TestPlanRejectsOversizedFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "big.yaml")
+	content := "#" + strings.Repeat("a", maxManifestBytes)
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr := runPlanCLI(t, "", "-f", path)
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2; stdout = %q", code, stdout)
+	}
+	if !strings.Contains(stderr, "VAR-PLAN-0003") {
+		t.Fatalf("stderr = %q, want a VAR-PLAN-0003 diagnostic", stderr)
+	}
+}
+
+// TestPlanBoundsEndlessStdin covers the io.LimitReader cap: an endless stream is
+// cut off and rejected instead of read forever.
+func TestPlanBoundsEndlessStdin(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"plan", "-f", "-"}, endlessReader{}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr.String(), "VAR-PLAN-0003") {
+		t.Fatalf("stderr = %q, want a VAR-PLAN-0003 diagnostic", stderr.String())
+	}
+}
+
+type endlessReader struct{}
+
+func (endlessReader) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = 'a'
+	}
+	return len(p), nil
 }
 
 func TestPlanHelp(t *testing.T) {

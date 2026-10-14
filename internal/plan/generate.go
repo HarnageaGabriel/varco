@@ -228,20 +228,30 @@ func (b *builder) addAnnotationFindings(resource ingress.Ingress) {
 
 // addPath emits the cases for one rule host and one HTTP path.
 func (b *builder) addPath(resource ingress.Ingress, host string, path ingress.Path, source Source) {
+	// An omitted path is only legal for pathType ImplementationSpecific, and
+	// ingress-nginx treats it as "/".
+	declared := path.Path
+	omitted := declared == ""
+	if omitted {
+		declared = "/"
+	}
 	prefixLike, typeNote := pathTypeBehaviour(path.PathType)
 	regexIngress := regexEnabled(resource)
-	regexPath := regexIngress || containsRegexMeta(path.Path)
+	regexPath := regexIngress || containsRegexMeta(declared)
 	rewrite := resource.Annotations[annotationRewriteTarget] != ""
 	_, hostRegex := b.regexHosts[host]
 
-	target := path.Path
+	target := declared
 	derived := false
 	var notes []string
 	if typeNote != "" {
 		notes = append(notes, typeNote)
 	}
+	if omitted {
+		notes = append(notes, "an omitted path is treated as / by ingress-nginx")
+	}
 	if regexPath {
-		sample, ok := regexSample(path.Path)
+		sample, ok := regexSample(declared)
 		if !ok {
 			b.addFinding(Finding{
 				Code:    diag.CodePlanRegexSample,
@@ -335,11 +345,16 @@ func (b *builder) addAppRoot(index int, resource ingress.Ingress) {
 }
 
 // emit resolves the scheme and SNI for the host, appends the cases, and adds
-// the plain-HTTP redirect case when the host serves TLS or enables ssl-redirect.
+// the plain-HTTP redirect case when the host serves TLS or enables ssl-redirect,
+// unless ssl-redirect or force-ssl-redirect is explicitly false.
 func (b *builder) emit(resource ingress.Ingress, host string, source Source, requests []requested, shared string) {
 	scheme, sni := SchemeHTTP, ""
-	if b.tlsHosts[host] {
+	tls := b.tlsHosts[host]
+	if tls {
 		scheme, sni = SchemeHTTPS, host
+	}
+	if enabled, set := sslRedirectAnnotation(resource); set && !enabled && tls {
+		shared = joinNotes(shared, "ssl-redirect/force-ssl-redirect is explicitly false, so varco plans no plain-HTTP redirect for this TLS host")
 	}
 	for _, item := range requests {
 		caseSource := source
@@ -356,7 +371,7 @@ func (b *builder) emit(resource ingress.Ingress, host string, source Source, req
 			Note:    joinNotes(item.note, shared),
 		})
 	}
-	if !b.tlsHosts[host] && !sslRedirect(resource) {
+	if !redirectsPlainHTTP(resource, tls) {
 		return
 	}
 	seen := make(map[string]bool, len(requests))
@@ -377,6 +392,17 @@ func (b *builder) emit(resource ingress.Ingress, host string, source Source, req
 			Note:   "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host",
 		})
 	}
+}
+
+// redirectsPlainHTTP reports whether plain HTTP on a host is redirected to
+// HTTPS. A host with TLS redirects by default; ssl-redirect and
+// force-ssl-redirect override that default, so an explicit false turns the
+// redirect off even for a TLS host.
+func redirectsPlainHTTP(resource ingress.Ingress, tlsHost bool) bool {
+	if enabled, set := sslRedirectAnnotation(resource); set {
+		return enabled
+	}
+	return tlsHost
 }
 
 func (b *builder) addFinding(finding Finding) {
@@ -418,15 +444,20 @@ func regexEnabled(resource ingress.Ingress) bool {
 	return resource.Annotations[annotationRewriteTarget] != ""
 }
 
-// sslRedirect reports whether an Ingress explicitly enables the HTTP to HTTPS
-// redirect through ssl-redirect or force-ssl-redirect.
-func sslRedirect(resource ingress.Ingress) bool {
+// sslRedirectAnnotation returns the ssl-redirect or force-ssl-redirect value and
+// whether one of them is set. ssl-redirect wins over force-ssl-redirect, the
+// precedence ingress-nginx uses. ingress-nginx reads these as booleans, so only
+// "true" enables the redirect and any other explicit value disables it.
+func sslRedirectAnnotation(resource ingress.Ingress) (enabled, set bool) {
+	// Either annotation set to true forces the redirect (VERIFY: precedence when
+	// ssl-redirect is false and force-ssl-redirect is true).
 	for _, name := range []string{annotationSSLRedirect, annotationForceSSLRedirect} {
 		if value, ok := resource.Annotations[name]; ok {
-			return strings.EqualFold(strings.TrimSpace(value), "true")
+			set = true
+			enabled = enabled || strings.EqualFold(strings.TrimSpace(value), "true")
 		}
 	}
-	return false
+	return enabled, set
 }
 
 // redirectAnnotation names the annotation responsible for the HTTP redirect.
@@ -439,9 +470,15 @@ func redirectAnnotation(resource ingress.Ingress) string {
 	return ""
 }
 
-// resourceHasTLS reports whether spec.tls covers the rule host.
+// resourceHasTLS reports whether spec.tls covers the rule host. A spec.tls
+// entry with no hosts applies to every host of the Ingress: Kubernetes reads a
+// secret-only entry as the default certificate, so every rule host is served
+// over TLS.
 func resourceHasTLS(resource ingress.Ingress, ruleHost, effectiveHost string) bool {
 	for _, entry := range resource.TLS {
+		if len(entry.Hosts) == 0 {
+			return true
+		}
 		for _, host := range entry.Hosts {
 			if host == ruleHost || host == effectiveHost {
 				return true
@@ -457,14 +494,16 @@ func containsRegexMeta(path string) bool {
 }
 
 // regexSample derives one literal request path from a supported regex form.
-// Only the two trivial forms documented in docs/adr/0005-plan-case-families.md
-// are sampled; anything else is reported as unsupported.
+// The forms documented in docs/adr/0005-plan-case-families.md are sampled: a
+// literal with an optional trailer of (/|$)(.*), (/|$), (/.*), /(.*), /.* or
+// (.*), and a bare literal with an optional leading ^. Anything else is
+// reported as unsupported.
 func regexSample(pattern string) (string, bool) {
 	candidate := strings.TrimPrefix(pattern, "^")
 	if !strings.HasPrefix(candidate, "/") {
 		return "", false
 	}
-	for _, suffix := range []string{"(/|$)(.*)", "(/|$)"} {
+	for _, suffix := range []string{"(/|$)(.*)", "(/|$)", "(/.*)", "/(.*)", "/.*", "(.*)"} {
 		if literal, ok := strings.CutSuffix(candidate, suffix); ok {
 			if literal == "" || containsRegexMeta(literal) {
 				return "", false

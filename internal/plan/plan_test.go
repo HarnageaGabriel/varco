@@ -197,8 +197,14 @@ func TestBuildRegexSample(t *testing.T) {
 		{path: "/catalog(/|$)", wantPath: "/catalog/varco-probe"},
 		{path: "^/legacy", wantPath: "/legacy"},
 		{path: "/plain", wantPath: "/plain"},
+		{path: "/api(/|$)(.*)", wantPath: "/api/varco-probe"},
+		{path: "/api/(.*)", wantPath: "/api/varco-probe"},
+		{path: "/api/.*", wantPath: "/api/varco-probe"},
+		{path: "/api(/.*)", wantPath: "/api/varco-probe"},
+		{path: "/api(.*)", wantPath: "/api/varco-probe"},
 		{path: "/v[0-9]{1,3}/items/(.*)", wantFind: true},
 		{path: "^/a/[0-9]+$", wantFind: true},
+		{path: "/a/[0-9]+", wantFind: true},
 		{path: "/(a|b)", wantFind: true},
 	}
 	for _, test := range tests {
@@ -379,17 +385,110 @@ func TestBuildSSLRedirectWithoutTLS(t *testing.T) {
 	}
 }
 
-func TestBuildDisabledSSLRedirectKeepsTLSRedirect(t *testing.T) {
-	resource := pathIngress("checkout", "api.example.com", "/api", "Prefix", map[string]string{annotationSSLRedirect: "false"})
-	resource.TLS = []ingress.TLS{{Hosts: []string{"api.example.com"}}}
-	result := Build([]ingress.Ingress{resource}, Options{})
-	if len(pathsByFamily(result)[FamilyHTTPRedirect]) == 0 {
-		t.Fatal("a TLS host must still plan the HTTP redirect")
+// TestBuildDisabledSSLRedirectSkipsRedirect covers fix B: ssl-redirect is true
+// by default for a TLS host, but an explicit false turns the plain-HTTP redirect
+// off and is recorded as a note instead.
+func TestBuildDisabledSSLRedirectSkipsRedirect(t *testing.T) {
+	tests := []struct {
+		name       string
+		annotation string
+	}{
+		{name: "ssl-redirect", annotation: annotationSSLRedirect},
+		{name: "force-ssl-redirect", annotation: annotationForceSSLRedirect},
 	}
-	for _, item := range result.Cases {
-		if item.Family == FamilyBase && item.Scheme != SchemeHTTPS {
-			t.Fatalf("base case scheme = %s", item.Scheme)
-		}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			resource := pathIngress("checkout", "api.example.com", "/api", "Prefix", map[string]string{test.annotation: "false"})
+			resource.TLS = []ingress.TLS{{Hosts: []string{"api.example.com"}}}
+			result := Build([]ingress.Ingress{resource}, Options{})
+			if got := pathsByFamily(result)[FamilyHTTPRedirect]; len(got) != 0 {
+				t.Fatalf("%s false must plan no http-redirect case, got %#v", test.name, got)
+			}
+			sawNote := false
+			for _, item := range result.Cases {
+				if item.Scheme != SchemeHTTPS {
+					t.Fatalf("case %s uses scheme %s", item.Path, item.Scheme)
+				}
+				if strings.Contains(item.Note, "explicitly false") {
+					sawNote = true
+				}
+			}
+			if !sawNote {
+				t.Fatal("an explicitly disabled redirect must be explained in a note")
+			}
+		})
+	}
+}
+
+// TestBuildTLSEntryWithoutHosts covers fix A: a spec.tls entry with no hosts is
+// the default certificate and covers every rule host of the Ingress.
+func TestBuildTLSEntryWithoutHosts(t *testing.T) {
+	tests := []struct {
+		name     string
+		host     string
+		options  Options
+		wantHost string
+	}{
+		{name: "literal host", host: "api.example.com", wantHost: "api.example.com"},
+		{name: "wildcard host", host: "*.example.com", wantHost: "varco-probe.example.com"},
+		{name: "default host", options: Options{DefaultHost: "internal.svc"}, wantHost: "internal.svc"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			resource := pathIngress("checkout", test.host, "/api", "Prefix", nil)
+			resource.TLS = []ingress.TLS{{SecretName: "default-tls"}}
+			result := Build([]ingress.Ingress{resource}, test.options)
+			if len(result.Cases) == 0 {
+				t.Fatal("no cases planned")
+			}
+			redirects := 0
+			for _, item := range result.Cases {
+				if item.Family == FamilyHTTPRedirect {
+					if item.Scheme != SchemeHTTP {
+						t.Fatalf("redirect case uses scheme %s", item.Scheme)
+					}
+					redirects++
+					continue
+				}
+				if item.Scheme != SchemeHTTPS || item.SNI != test.wantHost {
+					t.Fatalf("case %#v is not served over TLS", item)
+				}
+			}
+			if redirects == 0 {
+				t.Fatal("a host covered by a hostless TLS entry must still plan the HTTP redirect")
+			}
+		})
+	}
+}
+
+// TestBuildOmittedPathIsRoot covers fix F: an omitted path is treated as "/".
+func TestBuildOmittedPathIsRoot(t *testing.T) {
+	tests := []struct {
+		name     string
+		pathType string
+	}{
+		{name: "implementation-specific", pathType: "ImplementationSpecific"},
+		{name: "untyped", pathType: ""},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			resource := pathIngress("root", "www.example.com", "", test.pathType, nil)
+			result := Build([]ingress.Ingress{resource}, Options{})
+			if len(result.Unsupported) != 0 {
+				t.Fatalf("an omitted path must not be a finding: %#v", result.Unsupported)
+			}
+			if got := pathsByFamily(result)[FamilyBase]; !reflect.DeepEqual(got, []string{"/"}) {
+				t.Fatalf("base path = %#v, want [\"/\"]", got)
+			}
+			for _, item := range result.Cases {
+				if item.Family == FamilyBase && !strings.Contains(item.Note, "omitted path") {
+					t.Fatalf("omitted-path case note = %q", item.Note)
+				}
+				if !strings.HasPrefix(item.Path, "/") {
+					t.Fatalf("case path %q is not rooted", item.Path)
+				}
+			}
+		})
 	}
 }
 
@@ -517,7 +616,13 @@ func TestHelpers(t *testing.T) {
 		{pattern: "/plain(/|$)(.*)", want: "/plain/varco-probe", ok: true},
 		{pattern: "/plain(/|$)", want: "/plain/varco-probe", ok: true},
 		{pattern: "/plain/", want: "/plain/", ok: true},
+		{pattern: "/api/(.*)", want: "/api/varco-probe", ok: true},
+		{pattern: "/api/.*", want: "/api/varco-probe", ok: true},
+		{pattern: "/api(/.*)", want: "/api/varco-probe", ok: true},
+		{pattern: "/api(.*)", want: "/api/varco-probe", ok: true},
+		{pattern: "/api(/|$)(.*)", want: "/api/varco-probe", ok: true},
 		{pattern: "/[0-9]+", ok: false},
+		{pattern: "/a/[0-9]+", ok: false},
 		{pattern: "plain", ok: false},
 		{pattern: "/(a|b)", ok: false},
 		{pattern: "/x/(.*)/$", ok: false},

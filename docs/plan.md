@@ -19,10 +19,12 @@ varco plan -f api.yaml --ingress-class nginx --default-host fallback.example.com
 ```
 
 Flags: `-f <file|directory|->` (repeatable; a directory is walked recursively
-and only `*.yaml`, `*.yml` and `*.json` files are read, sorted by path),
-`--format (table|json)`, `--ingress-class NAME` (matches `spec.ingressClassName`
-or the `kubernetes.io/ingress.class` annotation), `--default-host HOST` (used by
-rules that declare no host).
+and only regular `*.yaml`, `*.yml` and `*.json` files are read, sorted by path;
+symlinks and other non-regular files are skipped), `--format (table|json)`,
+`--ingress-class NAME` (matches `spec.ingressClassName` or the
+`kubernetes.io/ingress.class` annotation), `--default-host HOST` (used by rules
+that declare no host). One input, file or stream, is read through an 8 MiB cap;
+a larger input is rejected with `VAR-PLAN-0003`.
 
 Exit codes: `0` when a plan was produced, even if it contains unsupported
 findings (findings are part of the output, not an error), `2` for usage errors
@@ -63,7 +65,7 @@ Each family isolates one behavior so a difference can be attributed to it.
 | `case-flip` | path with letter case swapped | `use-regex` and `rewrite-target` make matching case-insensitive for the whole host (behaviors 1 to 3) |
 | `dot-segments` | `/varco/../` + path | URL normalization resolves `..` before matching (behavior 5) |
 | `double-slash` | `//` + path | repeated slashes are normalized or answered with `301` (behavior 5) |
-| `http-redirect` | plain HTTP, same path | a host with TLS, `ssl-redirect` or `force-ssl-redirect` answers HTTP with a redirect |
+| `http-redirect` | plain HTTP, same path | a host with TLS, or with `ssl-redirect`/`force-ssl-redirect` set true, answers HTTP with a redirect; an explicit false on a TLS host suppresses it |
 | `cors-preflight` | `OPTIONS` with `Origin: https://varco.invalid` and `Access-Control-Request-Method: GET` | `enable-cors` answers preflight (plus `Access-Control-Request-Headers` when `cors-allow-headers` is set) |
 | `rewrite` | the `base` and `subpath` requests | `rewrite-target` rewrites the upstream path (behavior 3) |
 | `app-root` | `GET /` | the `app-root` annotation redirects `/` to the application root |
@@ -73,12 +75,14 @@ Rule host and path type decide what is emitted: `Exact` paths get `base`,
 `trailing-slash` (unless regex), `case-flip` (when matching is case-insensitive),
 `dot-segments` and `double-slash`; `Prefix` adds `subpath` and
 `prefix-boundary`; `ImplementationSpecific` is treated as `Prefix`-like with a
-note, because that is what ingress-nginx does. A path containing regex
-metacharacters (`^$()[]{}*+?|\`) is only sampled when it matches one of two
-trivial forms, otherwise the path is reported as unsupported rather than
+note, because that is what ingress-nginx does. An omitted path is treated as `/`
+with a note. A path containing regex metacharacters (`^$()[]{}*+?|\`) is only
+sampled when it has a literal prefix with an optional `^` anchor and one of a
+small set of suffixes, otherwise the path is reported as unsupported rather than
 guessed.
 
-- `/literal(/|$)(.*)` or `/literal(/|$)` -> `/literal/varco-probe`
+- `/literal(/|$)(.*)`, `/literal(/|$)`, `/literal(/.*)`, `/literal/(.*)`,
+  `/literal/.*` or `/literal(.*)` -> `/literal/varco-probe`
 - `^?/literal` -> `/literal`
 
 `use-regex` on any Ingress, or a `rewrite-target` anywhere on the host, turns on
@@ -87,7 +91,11 @@ host-wide regex matching. Planning then adds a `case-flip` case for every
 Ingress resources, and records a `VAR-PLAN-0006` warning naming the host.
 
 Hosts for TLS cases use `scheme: https` with `sni` equal to the host. A
-wildcard host `*.example.com` is planned as `varco-probe.example.com` with a
+`spec.tls` entry with no hosts is the default certificate and covers every rule
+host of the Ingress, and a host served over TLS answers plain HTTP with a
+redirect by default. `ssl-redirect: "false"` or `force-ssl-redirect: "false"`
+suppresses that redirect on a TLS host and records a note instead. A wildcard
+host `*.example.com` is planned as `varco-probe.example.com` with a
 `VAR-PLAN-0004` warning. A rule without a host is planned on `--default-host`, or
 reported as `VAR-PLAN-0005`.
 
@@ -97,7 +105,7 @@ reported as `VAR-PLAN-0005`.
 |---|---|
 | `VAR-PLAN-0001` | an annotation varco cannot test black-box, or one unknown to varco |
 | `VAR-PLAN-0002` | a regex path whose sample cannot be derived without guessing |
-| `VAR-PLAN-0003` | a manifest that cannot be parsed, or uses an unsupported Ingress API version |
+| `VAR-PLAN-0003` | a manifest that cannot be parsed or is larger than the 8 MiB input cap, or uses an unsupported Ingress API version |
 | `VAR-PLAN-0004` | a wildcard host planned with the concrete label `varco-probe` |
 | `VAR-PLAN-0005` | a rule without a host and no `--default-host` |
 | `VAR-PLAN-0006` | host-wide regex scope caused by `use-regex` or `rewrite-target` |

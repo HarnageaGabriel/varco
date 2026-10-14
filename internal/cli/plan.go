@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -67,7 +68,7 @@ func runPlan(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 // expandInputs turns -f values into a sorted, de-duplicated list of manifest
 // files. Directories are walked recursively and only *.yaml, *.yml and *.json
-// files are collected, so the plan never depends on directory order.
+// regular files are collected, so the plan never depends on directory order.
 func expandInputs(inputs []string, stderr io.Writer) ([]string, int) {
 	seen := make(map[string]bool, len(inputs))
 	paths := make([]string, 0, len(inputs))
@@ -95,7 +96,7 @@ func expandInputs(inputs []string, stderr io.Writer) ([]string, int) {
 			if err != nil {
 				return err
 			}
-			if entry.IsDir() || !manifestFile(entry.Name()) {
+			if !walkableManifest(entry) {
 				return nil
 			}
 			appendPath(path)
@@ -129,17 +130,49 @@ func parseInputs(paths []string, stdin io.Reader, stderr io.Writer) ([]ingress.I
 	return resources, 0
 }
 
-// parseInput reads one manifest input: stdin for -, a file otherwise.
+// maxManifestBytes caps one manifest input, file or stream, so a huge or
+// unending input cannot exhaust memory. It is generous for real manifests.
+const maxManifestBytes = 8 << 20
+
+// parseInput reads one manifest input: stdin for -, a file otherwise. The
+// input is read through io.LimitReader so it can never exceed maxManifestBytes.
 func parseInput(path string, stdin io.Reader) ([]ingress.Ingress, error) {
+	var reader io.Reader
 	if path == stdinInput {
-		return ingress.Parse(stdin)
+		reader = stdin
+	} else {
+		file, err := os.Open(path) //nolint:gosec // the path is the manifest the user asked to plan
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = file.Close() }()
+		reader = file
 	}
-	file, err := os.Open(path) //nolint:gosec // the path is the manifest the user asked to plan
+	content, err := io.ReadAll(io.LimitReader(reader, maxManifestBytes+1))
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = file.Close() }()
-	return ingress.Parse(file)
+	if len(content) > maxManifestBytes {
+		return nil, manifestTooLarge()
+	}
+	return ingress.Parse(bytes.NewReader(content))
+}
+
+// manifestTooLarge builds the VAR-PLAN-0003 diagnostic for an oversized input.
+func manifestTooLarge() error {
+	message := fmt.Sprintf("manifest is larger than the %d-byte limit varco reads", maxManifestBytes)
+	diagnostic, err := diag.New(diag.CodePlanManifest, message)
+	if err != nil {
+		return errors.New(message)
+	}
+	return &diag.Error{Diagnostic: diagnostic}
+}
+
+// walkableManifest reports whether a directory entry is a manifest varco reads:
+// a regular file with a manifest extension. Directories, symlinks (which
+// filepath.WalkDir does not follow), and other non-regular files are skipped.
+func walkableManifest(entry fs.DirEntry) bool {
+	return !entry.IsDir() && entry.Type().IsRegular() && manifestFile(entry.Name())
 }
 
 // manifestFile reports whether a directory entry looks like a manifest varco reads.

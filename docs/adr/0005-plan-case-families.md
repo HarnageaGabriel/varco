@@ -40,10 +40,11 @@ across all Ingress resources, because that is how ingress-nginx behaves
 
 Escalations and refusals:
 
-- A regex path is sampled only in the two trivial forms
-  `/literal(/|$)(.*)` and `^?/literal`; anything else is reported as
-  `VAR-PLAN-0002` and produces no case. Guessing a matching path would produce a
-  case whose expected result nobody can state.
+- A regex path is sampled only when it is a literal prefix with an optional `^`
+  anchor and one of the trailers `(/|$)(.*)`, `(/|$)`, `(/.*)`, `/(.*)`, `/.*`
+  or `(.*)` (for example `/api/(.*)` or `/api/.*`), or a bare literal; anything
+  else is reported as `VAR-PLAN-0002` and produces no case. Guessing a matching
+  path would produce a case whose expected result nobody can state.
 - `Exact` and `Prefix` paths are kept verbatim; `ImplementationSpecific` is
   treated as `Prefix`-like with a note, because ingress-nginx treats it as a
   prefix (or a regex when regex scope is on).
@@ -57,7 +58,13 @@ Escalations and refusals:
 - A rule without a host needs `--default-host`; without it the rule is reported
   as `VAR-PLAN-0005` instead of being planned against a made-up host.
 - `http-redirect` is emitted per path, so a redirect difference is attributable
-  to a specific route.
+  to a specific route. A host with TLS redirects by default, but an explicit
+  `ssl-redirect: "false"` (or `force-ssl-redirect: "false"`) suppresses the
+  redirect and is recorded as a note.
+- A `spec.tls` entry with no hosts is the Kubernetes default certificate and
+  covers every rule host of the Ingress.
+- An omitted `ImplementationSpecific` path is treated as `/`, which is what
+  ingress-nginx does, and is noted on the case.
 - `app-root` applies to the whole Ingress; the case is planned once, on the
   first rule that has a host, and the source records that rule index.
 - Annotations varco cannot observe black-box (timeouts, body size, auth,
