@@ -31,7 +31,7 @@ func base(t *testing.T, server *httptest.Server, scheme string) Request {
 
 func rawListener(t *testing.T, handler func(net.Conn)) (Request, func()) {
 	t.Helper()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func rawListener(t *testing.T, handler func(net.Conn)) (Request, func()) {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 		reader := bufio.NewReader(conn)
 		for {
 			line, readErr := reader.ReadString('\n')
@@ -413,7 +413,7 @@ func TestDoTimeout(t *testing.T) {
 	defer close(release)
 	request := base(t, server, "http")
 	request.Timeout = 100 * time.Millisecond
-	if _, err := Do(context.Background(), request); !errors.Is(err, os.ErrDeadlineExceeded) {
+	if _, err := Do(context.Background(), request); !errors.Is(err, os.ErrDeadlineExceeded) && !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err=%v", err)
 	}
 }

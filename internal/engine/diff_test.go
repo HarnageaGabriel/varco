@@ -3,12 +3,13 @@ package engine
 import (
 	"context"
 	"errors"
-	"github.com/HarnageaGabriel/varco/internal/diag"
 	"math"
 	"net/netip"
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/HarnageaGabriel/varco/internal/diag"
 
 	"github.com/HarnageaGabriel/varco/internal/clock"
 	"github.com/HarnageaGabriel/varco/internal/endpoint"
@@ -23,7 +24,7 @@ func (fakeTicker) Stop()                 {}
 
 type fakeClock struct{ c chan time.Time }
 
-func (f fakeClock) NewTicker(time.Duration) clock.Ticker { return fakeTicker{f.c} }
+func (f fakeClock) NewTicker(time.Duration) clock.Ticker { return fakeTicker(f) }
 
 func config() DiffConfig {
 	return DiffConfig{
@@ -58,7 +59,7 @@ func TestDiffSortsAndDedupesPaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var paths []string
+	paths := make([]string, 0, len(outcome.Differences))
 	for _, d := range outcome.Differences {
 		paths = append(paths, d.Path)
 	}

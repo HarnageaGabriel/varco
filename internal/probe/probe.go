@@ -93,9 +93,9 @@ func Do(ctx context.Context, request Request) (result.Result, error) {
 	var dialer net.Dialer
 	conn, err := dialer.DialContext(ctx, "tcp", request.Endpoint.String())
 	if err != nil {
-		return result.Result{}, fmt.Errorf("probe %s: %w", request.Endpoint.String(), err)
+		return result.Result{}, ioFailure(ctx, request.Endpoint.String(), "", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	stop := context.AfterFunc(ctx, func() {
 		if errors.Is(ctx.Err(), context.Canceled) {
 			_ = conn.Close()
@@ -109,38 +109,38 @@ func Do(ctx context.Context, request Request) (result.Result, error) {
 	rw := conn
 	var state *tls.ConnectionState
 	if request.Scheme == "https" {
-		tlsConfig := &tls.Config{ //nolint:gosec // probes capture certificates and accept old protocols; they do not assert trust.
-			InsecureSkipVerify: true,
+		tlsConfig := &tls.Config{
+			InsecureSkipVerify: true, //nolint:gosec // probes capture certificates and accept old protocols; they do not assert trust.
 			MinVersion:         tls.VersionTLS10,
 			ServerName:         request.SNI,
 			NextProtos:         []string{"http/1.1"},
 		}
 		tlsConn := tls.Client(conn, tlsConfig)
 		if err := tlsConn.HandshakeContext(ctx); err != nil {
-			return result.Result{}, fmt.Errorf("probe %s: tls handshake: %w", request.Endpoint.String(), err)
+			return result.Result{}, ioFailure(ctx, request.Endpoint.String(), "tls handshake", err)
 		}
 		connectionState := tlsConn.ConnectionState()
 		state = &connectionState
 		rw = tlsConn
 	}
 	if _, err := io.WriteString(rw, buildRequest(method, request)); err != nil {
-		return result.Result{}, fmt.Errorf("probe %s: write request: %w", request.Endpoint.String(), err)
+		return result.Result{}, ioFailure(ctx, request.Endpoint.String(), "write request", err)
 	}
 	reader := bufio.NewReader(rw)
 	var response *http.Response
 	for interim := 0; ; {
 		header, err := readHeaderBlock(reader)
 		if err != nil {
-			return result.Result{}, fmt.Errorf("probe %s: read response: %w", request.Endpoint.String(), err)
+			return result.Result{}, ioFailure(ctx, request.Endpoint.String(), "read response", err)
 		}
-		parsed, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(header)), &http.Request{Method: method})
+		parsed, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(header)), &http.Request{Method: method}) //nolint:bodyclose // body is never drained; the connection is closed by defer conn.Close.
 		if err != nil {
-			return result.Result{}, fmt.Errorf("probe %s: read response: %w", request.Endpoint.String(), err)
+			return result.Result{}, ioFailure(ctx, request.Endpoint.String(), "read response", err)
 		}
 		if parsed.StatusCode < 100 || parsed.StatusCode >= 200 || parsed.StatusCode == http.StatusSwitchingProtocols {
-			response, err = http.ReadResponse(bufio.NewReader(io.MultiReader(bytes.NewReader(header), reader)), &http.Request{Method: method})
+			response, err = http.ReadResponse(bufio.NewReader(io.MultiReader(bytes.NewReader(header), reader)), &http.Request{Method: method}) //nolint:bodyclose // body is consumed by capture; the connection is closed by defer conn.Close.
 			if err != nil {
-				return result.Result{}, fmt.Errorf("probe %s: read response: %w", request.Endpoint.String(), err)
+				return result.Result{}, ioFailure(ctx, request.Endpoint.String(), "read response", err)
 			}
 			break
 		}
@@ -151,10 +151,7 @@ func Do(ctx context.Context, request Request) (result.Result, error) {
 	}
 	captured, err := capture(response, state, maxBodyBytes)
 	if err != nil {
-		if errors.Is(ctx.Err(), context.Canceled) {
-			return result.Result{}, context.Canceled
-		}
-		return result.Result{}, err
+		return result.Result{}, ioFailure(ctx, request.Endpoint.String(), "", err)
 	}
 	return captured, nil
 }
@@ -326,7 +323,7 @@ func ValidSNI(name string) bool {
 		}
 		for i := 0; i < len(label); i++ {
 			c := label[i]
-			if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-') {
+			if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '-' {
 				return false
 			}
 		}
@@ -346,6 +343,19 @@ func validToken(s string) bool {
 		return false
 	}
 	return true
+}
+
+// ioFailure reports an I/O error from a probe, preferring the probe context's
+// own error when it is already done. Cancellation and deadlines must surface as
+// such rather than as a closed connection or a bare socket error.
+func ioFailure(ctx context.Context, endpointName, stage string, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		err = ctxErr
+	}
+	if stage == "" {
+		return fmt.Errorf("probe %s: %w", endpointName, err)
+	}
+	return fmt.Errorf("probe %s: %s: %w", endpointName, stage, err)
 }
 
 func diagnosticError(code diag.Code, message string, cause error) error {

@@ -27,7 +27,7 @@ func Parse(value string, defaultPort uint16) (Endpoint, error) {
 	if err != nil {
 		return Endpoint{}, fmt.Errorf("parse endpoint %q: %w", value, err)
 	}
-	if strings.Contains(host, ":") && !(strings.HasPrefix(value, "[") && strings.Contains(value, "]:")) {
+	if strings.Contains(host, ":") && (!strings.HasPrefix(value, "[") || !strings.Contains(value, "]:")) {
 		return Endpoint{}, fmt.Errorf("IPv6 with a port must be bracketed")
 	}
 	addr, err := netip.ParseAddr(host)
