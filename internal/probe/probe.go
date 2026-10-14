@@ -3,6 +3,7 @@ package probe
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
@@ -21,10 +22,12 @@ import (
 	"github.com/HarnageaGabriel/varco/internal/result"
 )
 
-// maxBodyBytes bounds how many body bytes are hashed. Every byte up to the
-// bound is streamed into the digest (nothing is buffered); a longer body is
-// reported as truncated. It is a variable so tests can lower it.
-var maxBodyBytes int64 = 1 << 30
+const (
+	defaultMaxBodyBytes = int64(256 << 20)
+	defaultTimeout      = 10 * time.Second
+	maxHeaderBytes      = 64 << 10
+	maxInterimResponses = 8
+)
 
 // Request configures one endpoint probe.
 type Request struct {
@@ -36,6 +39,7 @@ type Request struct {
 	Path              string
 	Headers           []result.Header
 	Timeout           time.Duration
+	MaxBodyBytes      int64
 	AllowUnsafeMethod bool
 }
 
@@ -55,7 +59,7 @@ func Do(ctx context.Context, request Request) (result.Result, error) {
 		return result.Result{}, fmt.Errorf("unsupported scheme %q", request.Scheme)
 	}
 	if !ValidPath(request.Path) {
-		return result.Result{}, diagnosticError(diag.CodeInvalidFlag, fmt.Sprintf("invalid request path %q", request.Path), nil)
+		return result.Result{}, diagnosticError(diag.CodeInvalidFlag, fmt.Sprintf("invalid request path (length %d)", len(request.Path)), nil)
 	}
 	if !ValidHost(request.Host) {
 		return result.Result{}, diagnosticError(diag.CodeInvalidFlag, fmt.Sprintf("invalid host %q", request.Host), nil)
@@ -74,10 +78,17 @@ func Do(ctx context.Context, request Request) (result.Result, error) {
 		}
 	}
 
-	if request.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, request.Timeout)
-		defer cancel()
+	if request.Timeout <= 0 {
+		request.Timeout = defaultTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, request.Timeout)
+	defer cancel()
+	maxBodyBytes := request.MaxBodyBytes
+	if maxBodyBytes == 0 {
+		maxBodyBytes = defaultMaxBodyBytes
+	}
+	if maxBodyBytes < 0 {
+		return result.Result{}, diagnosticError(diag.CodeInvalidFlag, "maximum body bytes must not be negative", nil)
 	}
 	var dialer net.Dialer
 	conn, err := dialer.DialContext(ctx, "tcp", request.Endpoint.String())
@@ -85,7 +96,11 @@ func Do(ctx context.Context, request Request) (result.Result, error) {
 		return result.Result{}, fmt.Errorf("probe %s: %w", request.Endpoint.String(), err)
 	}
 	defer conn.Close()
-	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	stop := context.AfterFunc(ctx, func() {
+		if errors.Is(ctx.Err(), context.Canceled) {
+			_ = conn.Close()
+		}
+	})
 	defer stop()
 	if deadline, ok := ctx.Deadline(); ok {
 		_ = conn.SetDeadline(deadline)
@@ -111,12 +126,54 @@ func Do(ctx context.Context, request Request) (result.Result, error) {
 	if _, err := io.WriteString(rw, buildRequest(method, request)); err != nil {
 		return result.Result{}, fmt.Errorf("probe %s: write request: %w", request.Endpoint.String(), err)
 	}
-	response, err := http.ReadResponse(bufio.NewReader(rw), &http.Request{Method: method})
-	if err != nil {
-		return result.Result{}, fmt.Errorf("probe %s: read response: %w", request.Endpoint.String(), err)
+	reader := bufio.NewReader(rw)
+	var response *http.Response
+	for interim := 0; ; {
+		header, err := readHeaderBlock(reader)
+		if err != nil {
+			return result.Result{}, fmt.Errorf("probe %s: read response: %w", request.Endpoint.String(), err)
+		}
+		parsed, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(header)), &http.Request{Method: method})
+		if err != nil {
+			return result.Result{}, fmt.Errorf("probe %s: read response: %w", request.Endpoint.String(), err)
+		}
+		if parsed.StatusCode < 100 || parsed.StatusCode >= 200 || parsed.StatusCode == http.StatusSwitchingProtocols {
+			response, err = http.ReadResponse(bufio.NewReader(io.MultiReader(bytes.NewReader(header), reader)), &http.Request{Method: method})
+			if err != nil {
+				return result.Result{}, fmt.Errorf("probe %s: read response: %w", request.Endpoint.String(), err)
+			}
+			break
+		}
+		interim++
+		if interim > maxInterimResponses {
+			return result.Result{}, fmt.Errorf("probe %s: too many interim responses", request.Endpoint.String())
+		}
 	}
-	defer response.Body.Close()
-	return capture(response, state)
+	captured, err := capture(response, state, maxBodyBytes)
+	if err != nil {
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return result.Result{}, context.Canceled
+		}
+		return result.Result{}, err
+	}
+	return captured, nil
+}
+
+func readHeaderBlock(reader *bufio.Reader) ([]byte, error) {
+	var block bytes.Buffer
+	for {
+		fragment, err := reader.ReadSlice('\n')
+		if block.Len()+len(fragment) > maxHeaderBytes {
+			return nil, fmt.Errorf("response header exceeds %d bytes", maxHeaderBytes)
+		}
+		_, _ = block.Write(fragment)
+		if err != nil && !errors.Is(err, bufio.ErrBufferFull) {
+			return nil, err
+		}
+		if err == nil && (bytes.Equal(fragment, []byte("\n")) || bytes.Equal(fragment, []byte("\r\n"))) {
+			return block.Bytes(), nil
+		}
+	}
 }
 
 func buildRequest(method string, request Request) string {
@@ -138,7 +195,7 @@ func buildRequest(method string, request Request) string {
 	return b.String()
 }
 
-func capture(response *http.Response, state *tls.ConnectionState) (result.Result, error) {
+func capture(response *http.Response, state *tls.ConnectionState, maxBodyBytes int64) (result.Result, error) {
 	hasher := sha256.New()
 	size, err := io.Copy(hasher, io.LimitReader(response.Body, maxBodyBytes))
 	if err != nil {
@@ -154,7 +211,13 @@ func capture(response *http.Response, state *tls.ConnectionState) (result.Result
 			return result.Result{}, fmt.Errorf("read response body: %w", readErr)
 		}
 	}
-	captured := result.Result{StatusCode: response.StatusCode, Headers: canonicalHeaders(response.Header), BodySHA256: hex.EncodeToString(hasher.Sum(nil)), BodySize: size, Truncated: truncated}
+	headers := canonicalHeaders(response.Header)
+	for _, trailer := range canonicalHeaders(response.Trailer) {
+		trailer.Name = "Trailer:" + trailer.Name
+		headers = append(headers, trailer)
+	}
+	sort.Slice(headers, func(i, j int) bool { return headers[i].Name < headers[j].Name })
+	captured := result.Result{StatusCode: response.StatusCode, Headers: headers, BodySHA256: hex.EncodeToString(hasher.Sum(nil)), BodySize: size, Truncated: truncated}
 	if state != nil {
 		captured.TLSVersion = tls.VersionName(state.Version)
 		captured.CipherSuite = tls.CipherSuiteName(state.CipherSuite)
@@ -243,6 +306,29 @@ func ValidHost(host string) bool {
 	for i := 0; i < len(host); i++ {
 		if c := host[i]; c <= 0x20 || c == 0x7f || strings.IndexByte(`/?#@\`, c) >= 0 {
 			return false
+		}
+	}
+	return true
+}
+
+// ValidSNI accepts an IP address or DNS hostname without a port.
+func ValidSNI(name string) bool {
+	if net.ParseIP(name) != nil {
+		return true
+	}
+	if name == "" || len(name) > 253 || strings.ContainsAny(name, ":[]") {
+		return false
+	}
+	name = strings.TrimSuffix(name, ".")
+	for _, label := range strings.Split(name, ".") {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for i := 0; i < len(label); i++ {
+			c := label[i]
+			if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-') {
+				return false
+			}
 		}
 	}
 	return true

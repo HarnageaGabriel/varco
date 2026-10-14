@@ -139,3 +139,16 @@ func TestDiffCancelBetweenProbes(t *testing.T) {
 		t.Fatalf("err=%v calls=%d", err, calls)
 	}
 }
+
+func TestDiffCancellationWinsOverProbeFailure(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	probeErr := errors.New("connection closed")
+	fn := func(context.Context, probe.Request) (result.Result, error) {
+		cancel()
+		return result.Result{}, probeErr
+	}
+	outcome, err := Diff(ctx, config(), fakeClock{ticksOf(10)}, fn)
+	if !errors.Is(err, context.Canceled) || len(outcome.Failures) != 0 || len(outcome.Differences) != 0 {
+		t.Fatalf("outcome=%+v err=%v", outcome, err)
+	}
+}

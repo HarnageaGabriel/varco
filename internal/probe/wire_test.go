@@ -1,6 +1,7 @@
 package probe
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -8,8 +9,11 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"errors"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -23,6 +27,129 @@ import (
 func base(t *testing.T, server *httptest.Server, scheme string) Request {
 	t.Helper()
 	return Request{Endpoint: endpointOf(t, server.Listener.Addr().String()), Scheme: scheme, Host: "h.example", SNI: "h.example", Method: "GET", Path: "/", Timeout: 5 * time.Second}
+}
+
+func rawListener(t *testing.T, handler func(net.Conn)) (Request, func()) {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		conn, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		reader := bufio.NewReader(conn)
+		for {
+			line, readErr := reader.ReadString('\n')
+			if readErr != nil || line == "\r\n" {
+				break
+			}
+		}
+		handler(conn)
+	}()
+	request := Request{Endpoint: endpointOf(t, listener.Addr().String()), Scheme: "http", Host: "h.example", Method: "GET", Path: "/", Timeout: 2 * time.Second}
+	cleanup := func() {
+		_ = listener.Close()
+		<-done
+	}
+	return request, cleanup
+}
+
+// Source: RFC 9110 sections 15.2 and 15.3; informational responses precede
+// the final response and do not become the probe result.
+func TestDoSkipsInterimResponses(t *testing.T) {
+	for _, interim := range []string{"100 Continue", "103 Early Hints"} {
+		t.Run(interim, func(t *testing.T) {
+			request, cleanup := rawListener(t, func(conn net.Conn) {
+				_, _ = io.WriteString(conn, "HTTP/1.1 "+interim+"\r\nX-Interim: yes\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+			})
+			defer cleanup()
+			got, err := Do(context.Background(), request)
+			if err != nil || got.StatusCode != 200 || got.BodySize != 2 {
+				t.Fatalf("result=%+v err=%v", got, err)
+			}
+		})
+	}
+}
+
+func TestDoLimitsInterimResponses(t *testing.T) {
+	request, cleanup := rawListener(t, func(conn net.Conn) {
+		_, _ = io.WriteString(conn, strings.Repeat("HTTP/1.1 100 Continue\r\n\r\n", maxInterimResponses+1))
+	})
+	defer cleanup()
+	if _, err := Do(context.Background(), request); err == nil || !strings.Contains(err.Error(), "too many interim") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestDoBodylessStatus(t *testing.T) {
+	for _, status := range []string{"204 No Content", "304 Not Modified"} {
+		t.Run(status, func(t *testing.T) {
+			request, cleanup := rawListener(t, func(conn net.Conn) {
+				_, _ = io.WriteString(conn, "HTTP/1.1 "+status+"\r\nConnection: keep-alive\r\n\r\n")
+			})
+			defer cleanup()
+			got, err := Do(context.Background(), request)
+			if err != nil || got.BodySize != 0 {
+				t.Fatalf("result=%+v err=%v", got, err)
+			}
+		})
+	}
+}
+
+func TestDoCapturesTrailers(t *testing.T) {
+	request, cleanup := rawListener(t, func(conn net.Conn) {
+		_, _ = io.WriteString(conn, "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nTrailer: X-Checksum\r\n\r\n2\r\nok\r\n0\r\nX-Checksum: abc\r\n\r\n")
+	})
+	defer cleanup()
+	got, err := Do(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, header := range got.Headers {
+		if header.Name == "Trailer:X-Checksum" && len(header.Values) == 1 && header.Values[0] == "abc" {
+			return
+		}
+	}
+	t.Fatalf("headers=%+v", got.Headers)
+}
+
+func TestDoRejectsOversizeHeader(t *testing.T) {
+	request, cleanup := rawListener(t, func(conn net.Conn) {
+		_, _ = io.WriteString(conn, "HTTP/1.1 200 OK\r\nX-Large: "+strings.Repeat("a", maxHeaderBytes)+"\r\n\r\n")
+	})
+	defer cleanup()
+	if _, err := Do(context.Background(), request); err == nil || !strings.Contains(err.Error(), "header exceeds") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestDoInvalidPathErrorIsRedacted(t *testing.T) {
+	const secret = "token=super-secret"
+	request := Request{Scheme: "http", Host: "h", Method: "GET", Path: "/bad path?" + secret}
+	if _, err := Do(context.Background(), request); err == nil || strings.Contains(err.Error(), secret) || !strings.Contains(err.Error(), "length") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestDoContextCancelMidBody(t *testing.T) {
+	wrote := make(chan struct{})
+	request, cleanup := rawListener(t, func(conn net.Conn) {
+		_, _ = io.WriteString(conn, "HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nx")
+		close(wrote)
+		_, _ = io.Copy(io.Discard, conn)
+	})
+	defer cleanup()
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { <-wrote; cancel() }()
+	if _, err := Do(ctx, request); !errors.Is(err, context.Canceled) {
+		t.Fatalf("err=%v", err)
+	}
 }
 
 // Source: RFC 9112 section 3.2.1 (origin-form is sent as-is); the review
@@ -191,6 +318,43 @@ func TestDoNegotiatesLegacyTLS(t *testing.T) {
 	}
 }
 
+func TestDoNegotiatesTLS13(t *testing.T) {
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("x")) }))
+	server.TLS = &tls.Config{MinVersion: tls.VersionTLS13, MaxVersion: tls.VersionTLS13}
+	server.StartTLS()
+	defer server.Close()
+	got, err := Do(context.Background(), base(t, server, "https"))
+	if err != nil || got.TLSVersion != "TLS 1.3" {
+		t.Fatalf("TLSVersion=%q err=%v", got.TLSVersion, err)
+	}
+}
+
+func TestDoTLSWithoutDNSName(t *testing.T) {
+	var names []string
+	var mu sync.Mutex
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	server.TLS = &tls.Config{GetConfigForClient: func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
+		mu.Lock()
+		names = append(names, hello.ServerName)
+		mu.Unlock()
+		return nil, nil
+	}}
+	server.StartTLS()
+	defer server.Close()
+	for _, sni := range []string{"", "127.0.0.1"} {
+		request := base(t, server, "https")
+		request.SNI = sni
+		if _, err := Do(context.Background(), request); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(names) != 2 || names[0] != "" || names[1] != "" {
+		t.Fatalf("server names=%q", names)
+	}
+}
+
 // Source: RFC 9110 section 15.4 (redirects) over TLS: not followed, Location kept.
 func TestDoRedirectNotFollowedHTTPS(t *testing.T) {
 	var hits atomic.Int32
@@ -249,8 +413,8 @@ func TestDoTimeout(t *testing.T) {
 	defer close(release)
 	request := base(t, server, "http")
 	request.Timeout = 100 * time.Millisecond
-	if _, err := Do(context.Background(), request); err == nil {
-		t.Fatal("expected timeout")
+	if _, err := Do(context.Background(), request); !errors.Is(err, os.ErrDeadlineExceeded) {
+		t.Fatalf("err=%v", err)
 	}
 }
 
@@ -263,5 +427,8 @@ func TestValidators(t *testing.T) {
 	}
 	if !ValidHost("api.example.com:8443") || ValidHost("a b") || ValidHost("a\\b") || ValidHost("a?b") || ValidHost("a#b") {
 		t.Fatal("host validation")
+	}
+	if !ValidSNI("api.example.com") || !ValidSNI("127.0.0.1") || !ValidSNI("::1") || ValidSNI("") || ValidSNI("api.example.com:443") || ValidSNI("bad_name") {
+		t.Fatal("SNI validation")
 	}
 }

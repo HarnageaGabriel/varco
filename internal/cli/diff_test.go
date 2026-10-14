@@ -64,6 +64,7 @@ func TestRunDiff(t *testing.T) {
 		{"credential X-Api-Key", []string{"--old", addr(a), "--new", addr(b), "--header", "x-api-key=k"}, 2, "", "not allowed"},
 		{"host with slash", []string{"--old", addr(a), "--new", addr(b), "--host", "a/b"}, 2, "", "--host"},
 		{"host with space", []string{"--old", addr(a), "--new", addr(b), "--host", "a b"}, 2, "", "--host"},
+		{"SNI with port", []string{"--old", addr(a), "--new", addr(b), "--sni", "app.example:443"}, 2, "", "--sni"},
 		{"path CRLF", []string{"--old", addr(a), "--new", addr(b), "/x\r\nX: 1"}, 2, "", "control byte"},
 		{"path with query", []string{"--old", addr(a), "--new", addr(b), "/q?x=1"}, 0, "identical", ""},
 		{"bad timeout", []string{"--old", addr(a), "--new", addr(b), "--timeout", "0s"}, 2, "", "--timeout"},
@@ -201,6 +202,32 @@ func TestRunDiffHTTPS(t *testing.T) {
 	code := Run([]string{"diff", "--host", "app.example", "--sni", "edge.example", "--rate", "1000", "--old", addr, "--new", addr, "/"}, &stdout, &stderr)
 	if code != 0 || sni.Load() != "edge.example" {
 		t.Fatalf("code=%d sni=%v stderr=%q", code, sni.Load(), stderr.String())
+	}
+}
+
+func TestRunDiffDefaultSNIStripsHostPort(t *testing.T) {
+	var sni atomic.Value
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	server.TLS = &tls.Config{GetConfigForClient: func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
+		sni.Store(hello.ServerName)
+		return nil, nil
+	}}
+	server.StartTLS()
+	defer server.Close()
+	addr := server.Listener.Addr().String()
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"diff", "--host", "app.example:8443", "--rate", "1000", "--old", addr, "--new", addr}, &stdout, &stderr)
+	if code != 0 || sni.Load() != "app.example" {
+		t.Fatalf("code=%d sni=%v stderr=%q", code, sni.Load(), stderr.String())
+	}
+}
+
+func TestRunDiffInvalidPathIsRedacted(t *testing.T) {
+	const secret = "token=super-secret"
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"diff", "--old", "127.0.0.1", "--new", "127.0.0.2", "--host", "h", "/bad path?" + secret}, &stdout, &stderr)
+	if code != 2 || strings.Contains(stderr.String(), secret) || !strings.Contains(stderr.String(), "length") {
+		t.Fatalf("code=%d stderr=%q", code, stderr.String())
 	}
 }
 

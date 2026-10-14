@@ -2,7 +2,7 @@
 
 ## varco diff
 
-Sends the same request to two numeric IP endpoints and reports differences. `--old` and `--new` accept `IP`, `IPv4:port` or `[IPv6]:port`; hostnames are rejected (`VAR-CFG-0001`). `--host` sets the Host header, `--sni` the TLS server name (defaults to `--host`). Redirects are never followed. Exit codes: see [exit-codes.md](exit-codes.md).
+Sends the same request to two numeric IP endpoints and reports differences. `--old` and `--new` accept `IP`, `IPv4:port` or `[IPv6]:port`; hostnames are rejected (`VAR-CFG-0001`). `--host` sets the Host header. `--sni` accepts a hostname or IP address without a port and defaults to the hostname/IP portion of `--host`. Redirects are never followed. Exit codes: see [exit-codes.md](exit-codes.md).
 
 Flags: `--old --new --host --sni --scheme (http|https) --method --header NAME=VALUE --timeout --rate --ignore-header --format (table|json) --allow-unsafe-methods`. Positional arguments are paths (default `/`). Request headers `Authorization`, `Cookie` and `Proxy-Authorization` are refused.
 
@@ -13,7 +13,8 @@ Flags: `--old --new --host --sni --scheme (http|https) --method --header NAME=VA
 - `--header NAME=VALUE`: names must be valid tokens and values free of control bytes (exit 2). `Host` (use `--host`), `Content-Length`, `Transfer-Encoding`, `Trailer` and `Connection` are refused. Refused credential headers: `Authorization`, `Cookie`, `Proxy-Authorization`, `X-Api-Key`, `X-Auth-Token`, `Private-Token`, `Api-Key`. Known gap: other custom credential headers are not detected.
 - `--rate` must be between 0.001 and 10000 requests per second (exit 2 otherwise).
 - An unbracketed IPv6 address is address-only: `2001:db8::1:8443` is the address `2001:db8::1:8443` on the default port. To give a port, bracket it: `[2001:db8::1]:8443`.
-- Probes never use proxies, never decompress (the body hash covers the bytes on the wire and `Content-Encoding` is compared), accept TLS 1.0 and newer, and open a new connection per probe by design. The whole body is hashed (up to 1 GiB, then reported truncated).
+- Probes never use proxies, never decompress (the body hash covers the bytes on the wire and `Content-Encoding` is compared), accept TLS 1.0 and newer, and open a new connection per probe by design. Bodies are hashed up to 256 MiB by default, then reported truncated. Response status lines and headers are limited to 64 KiB; up to eight informational responses are skipped (except `101 Switching Protocols`).
+- Response trailers are compared as headers named `Trailer:<Name>`.
 - Multi-valued response headers are compared value by value, in order; an absent header differs from an empty one (`(absent)` in output).
 - If a probe fails for some path, the remaining paths are still compared, failures are listed on stderr as `VAR-NET-0001`, and the exit code is 3 (it wins over 1).
 - `Location` values are printed verbatim, including query strings: they can contain tokens, so treat reports as sensitive. Query redaction may come later as an opt-in flag.

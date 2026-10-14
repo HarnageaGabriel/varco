@@ -101,6 +101,9 @@ func Diff(ctx context.Context, config DiffConfig, clk clock.Clock, probeFn Probe
 			request := probe.Request{Endpoint: target, Scheme: config.Scheme, Host: config.Host, SNI: config.SNI, Method: config.Method, Path: path, Headers: config.Headers, Timeout: config.Timeout, AllowUnsafeMethod: config.AllowUnsafeMethod}
 			captured, err := probeFn(ctx, request)
 			if err != nil {
+				if ctxErr := ctx.Err(); ctxErr != nil {
+					return Outcome{}, ctxErr
+				}
 				var diagnosticError *diag.Error
 				if errors.As(err, &diagnosticError) {
 					return Outcome{}, err

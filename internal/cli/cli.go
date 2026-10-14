@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -127,14 +128,17 @@ func runDiff(args []string, stdout, stderr io.Writer) int {
 	}
 	for _, path := range paths {
 		if !strings.HasPrefix(path, "/") {
-			return configFailure(stderr, fmt.Sprintf("path %q must start with /", path))
+			return configFailure(stderr, fmt.Sprintf("path of length %d must start with /", len(path)))
 		}
 		if !probe.ValidPath(path) {
-			return configFailure(stderr, fmt.Sprintf("path %q contains a space or control byte", path))
+			return configFailure(stderr, fmt.Sprintf("path of length %d contains a space or control byte", len(path)))
 		}
 	}
 	if *sni == "" {
-		*sni = *host
+		*sni = sniFromHost(*host)
+	}
+	if !probe.ValidSNI(*sni) {
+		return configFailure(stderr, "--sni must be a hostname or IP address without a port")
 	}
 	config := engine.DiffConfig{Old: oldEndpoint, New: newEndpoint, Scheme: *scheme, Host: *host, SNI: *sni, Method: strings.ToUpper(*method), Headers: requestHeaders, Paths: paths, Timeout: *timeout, Rate: *rate, IgnoreHeaders: ignoreHeaders, AllowUnsafeMethod: *allowUnsafe}
 	outcome, err := engine.Diff(context.Background(), config, clock.Real{}, probe.Do)
@@ -168,6 +172,13 @@ func runDiff(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func sniFromHost(host string) string {
+	if name, _, err := net.SplitHostPort(host); err == nil {
+		return name
+	}
+	return strings.TrimPrefix(strings.TrimSuffix(host, "]"), "[")
 }
 
 func parseHeaders(values []string) ([]result.Header, error) {

@@ -2,7 +2,9 @@ package probe
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
 	"errors"
 	"net"
 	"net/http"
@@ -133,9 +135,7 @@ func TestDoUnsafeMethodAllowed(t *testing.T) {
 }
 
 func TestDoBodyTruncation(t *testing.T) {
-	previous := maxBodyBytes
-	maxBodyBytes = 8 << 20
-	defer func() { maxBodyBytes = previous }()
+	const maxBodyBytes = int64(8 << 20)
 	chunk := make([]byte, 1<<20)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		for i := 0; i < 9; i++ {
@@ -145,12 +145,16 @@ func TestDoBodyTruncation(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	got, err := Do(context.Background(), Request{Endpoint: endpointOf(t, server.Listener.Addr().String()), Scheme: "http", Host: "h", Method: "GET", Path: "/", Timeout: 10 * time.Second})
+	got, err := Do(context.Background(), Request{Endpoint: endpointOf(t, server.Listener.Addr().String()), Scheme: "http", Host: "h", Method: "GET", Path: "/", Timeout: 10 * time.Second, MaxBodyBytes: maxBodyBytes})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !got.Truncated || got.BodySize != maxBodyBytes {
 		t.Fatalf("truncated=%v size=%d", got.Truncated, got.BodySize)
+	}
+	want := sha256.Sum256(make([]byte, maxBodyBytes))
+	if got.BodySHA256 != hex.EncodeToString(want[:]) {
+		t.Fatalf("BodySHA256=%q, want %q", got.BodySHA256, hex.EncodeToString(want[:]))
 	}
 }
 
