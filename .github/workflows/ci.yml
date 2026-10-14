@@ -59,6 +59,7 @@ jobs:
           check_package internal/report 80
           check_package internal/model 90
           check_package internal/policy 90
+          check_package internal/explain 90
 
   lint:
     name: Lint

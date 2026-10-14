@@ -69,6 +69,12 @@ func RunTable(w io.Writer, report model.RunReport, options Options) error {
 				return err
 			}
 		}
+		for _, explanation := range evaluation.Explanations {
+			if _, err := fmt.Fprintf(tw, "\t\t\t\t\t\t\t\t\t\twhy: %s  fix: %s  see: %s\n",
+				explanation.Summary, explanation.Fix, explanation.Source); err != nil {
+				return err
+			}
+		}
 	}
 	return tw.Flush()
 }
