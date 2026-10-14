@@ -59,7 +59,7 @@ func TestPlanTableOutput(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d; stderr = %q", code, stderr)
 	}
-	for _, want := range []string{"CASES 4", "varco-probe.example.com", "VAR-PLAN-0002", "VAR-PLAN-0004", "VAR-PLAN-0005"} {
+	for _, want := range []string{"CASES 6", "varco-probe.example.com", "unmatched-route", "default-backend", "VAR-PLAN-0002", "VAR-PLAN-0004", "VAR-PLAN-0005"} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("table output %q does not contain %q", stdout, want)
 		}

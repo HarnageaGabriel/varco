@@ -10,6 +10,8 @@
 package model
 
 import (
+	"slices"
+
 	"github.com/HarnageaGabriel/varco/internal/diag"
 	"github.com/HarnageaGabriel/varco/internal/plan"
 	"github.com/HarnageaGabriel/varco/internal/result"
@@ -100,6 +102,48 @@ type Evaluation struct {
 	Outcome     Outcome      `json:"outcome"`
 	Differences []Difference `json:"differences"`
 	Error       string       `json:"error,omitempty"`
+
+	// Host, Method, Path and Family identify the case in table output. The JSON
+	// report keeps identifying a case by its id (the plan carries the request
+	// shape), so these fields never reach JSON.
+	Host   string `json:"-"`
+	Method string `json:"-"`
+	Path   string `json:"-"`
+	Family string `json:"-"`
+
+	// Unstable records the fields that differed between repeated observations of
+	// one endpoint. It drives --suggest-exceptions and is not part of the JSON
+	// contract.
+	Unstable Unstable `json:"-"`
+}
+
+// Unstable names the fields that differed between repeated observations of the
+// old and new endpoint.
+type Unstable struct {
+	Old []string `json:"-"`
+	New []string `json:"-"`
+}
+
+// Side reports which endpoint's repeated observations made field unstable and
+// the description to use in an acceptance reason.
+func (u Unstable) Side(field string) (string, bool) {
+	oldUnstable := slices.Contains(u.Old, field)
+	newUnstable := slices.Contains(u.New, field)
+	switch {
+	case oldUnstable && newUnstable:
+		return "old and new", true
+	case oldUnstable:
+		return "old", true
+	case newUnstable:
+		return "new", true
+	}
+	return "", false
+}
+
+// UnstableField is one (host, field) pair observed unstable across a run.
+type UnstableField struct {
+	Host  string `json:"-"`
+	Field string `json:"-"`
 }
 
 // Coverage states how much of the plan a run observed (ADR 0007).
@@ -118,12 +162,19 @@ type RunReport struct {
 	SchemaVersion     int            `json:"schema_version"`
 	Verdict           Outcome        `json:"verdict"`
 	Coverage          Coverage       `json:"coverage"`
+	Repeat            int            `json:"repeat"`
+	BodyPolicy        string         `json:"body_policy"`
+	Excluded          int            `json:"excluded"`
 	UnsupportedCount  int            `json:"unsupported_count"`
 	Unsupported       []plan.Finding `json:"unsupported"`
 	ExpiredExceptions []string       `json:"expired_exceptions"`
 	IgnoredFields     []string       `json:"ignored_fields"`
 	Cases             []Evaluation   `json:"cases"`
 	Redacted          bool           `json:"redacted"`
+
+	// Unstable lists the (host, field) pairs observed unstable, in stable order.
+	// It drives --suggest-exceptions and is not part of the JSON contract.
+	Unstable []UnstableField `json:"-"`
 }
 
 // Verdict derives the aggregate outcome from per-case outcomes (ADR 0007): a

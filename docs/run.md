@@ -19,6 +19,9 @@ varco run -f ingress.yaml --ingress-class nginx --old 10.0.0.1 --new 10.0.0.2 --
 varco run --plan plan.json --old 10.0.0.1 --new 10.0.0.2 --exceptions exceptions.yaml
 varco run --plan plan.json --old 10.0.0.1 --new 10.0.0.2 \
   --old-http 10.0.0.1:30080 --new-http 10.0.0.2:30080   # kind / NodePort
+varco run --plan plan.json --old 10.0.0.1 --new 10.0.0.2 --dry-run
+varco run --plan plan.json --old 10.0.0.1 --new 10.0.0.2 --repeat 3 \
+  --suggest-exceptions suggested-exceptions.yaml
 ```
 
 ## Flags
@@ -37,14 +40,83 @@ varco run --plan plan.json --old 10.0.0.1 --new 10.0.0.2 \
 | `--rate R` | maximum requests per second across **both** endpoints. Default 5. |
 | `--concurrency N` | cases probed in parallel. Default 4, allowed 1..64. |
 | `--timeout D` | per-request timeout. Default 10s. |
+| `--repeat N` | probe each endpoint N times per case (1..5). Default 1. Every repeat is a real request and counts against `--rate`. |
+| `--body (2xx\|hash\|none)` | when the response body hash is compared. Default `2xx`. |
+| `--max-requests N` | stop after N requests in total; `0` (the default) means unlimited. |
+| `--family NAME` | run only cases of this family (repeatable). |
+| `--exclude-path GLOB` | exclude cases whose request path matches this `path.Match` glob (repeatable). |
+| `--dry-run` | print the requests a run would send and exit without probing. |
+| `--suggest-exceptions FILE` | write an exceptions file for the fields observed unstable; never overwrites an existing file. |
 | `--quiet` | disable the `[i/n]` progress lines on stderr. |
 | `--show-sensitive` | print raw `Location` and error values instead of `REDACTED`; warns on stderr. |
 
 Only the methods present in the plan are sent, and only `GET`, `HEAD` and
 `OPTIONS` are allowed; any other method is refused with `VAR-RUN-0001`
-(exit 2). Old and new are probed back to back for each case, one global rate
-limiter covers every request to either endpoint, and cases are emitted in plan
-order regardless of completion order.
+(exit 2). Old and new are probed back to back for each case, repeated
+`--repeat` times per endpoint, and one global rate limiter covers every request
+to either endpoint (repeats included); cases are emitted in plan order
+regardless of completion order.
+
+## Repeated observations
+
+Unstable fields are a fact of real clusters: a header that carries a timestamp,
+a rotating `Set-Cookie`, a status that depends on which replica answers.
+`--repeat N` probes each endpoint N times per case (1 to 5; default 1), and every
+one of those requests is a real request that the rate limiter counts.
+
+A field that takes different values across the N observations of the *same*
+endpoint is **unstable**. An unstable field never makes a case `DIFFERENT`:
+
+- a difference on an unstable field is kept in the report as accepted, with the
+  reason `unstable: differs between repeated observations of <old|new>` and the
+  exception id `auto:unstable`;
+- if `status` itself is unstable on either endpoint, the case is `INCONCLUSIVE`
+  with the error `unstable status`, because no comparison is meaningful.
+
+`--suggest-exceptions FILE` writes a valid exceptions file (version 1) with one
+entry per `(host, field)` pair the run observed unstable, so the acceptance is
+explicit and reviewable on the next run. Each entry uses the exact host as its
+`match.host`, the reason `observed unstable across N observations`, and expires
+30 days after the run date. varco never overwrites an existing file: if the file
+already exists it exits 2.
+
+## Body policy
+
+`--body` decides when the response body hash is compared:
+
+| Value | Behavior |
+|---|---|
+| `2xx` | the default: compare the body only when both statuses are equal and 2xx. |
+| `hash` | always compare the body hash. |
+| `none` | never compare the body hash. |
+
+The default exists because a controller answers an unknown or unmatched route
+with its own `404`/`5xx` page, and those pages differ between controllers by
+design. Comparing them would report a difference that is not a routing
+difference. The policy in force is always recorded in the report as
+`body_policy`.
+
+## Request budget and filters
+
+- `--max-requests N` caps the total number of requests a run sends (`0`, the
+  default, means unlimited). When the next case would push the run past the
+  budget, that case and every later case are never probed: they are
+  `INCONCLUSIVE` with the error `budget` and counted as skipped.
+- `--family NAME` (repeatable) runs only cases of the named families.
+- `--exclude-path GLOB` (repeatable) drops cases whose request path matches the
+  glob, using `path.Match` semantics (`*` does not cross `/`, so use `/api` and
+  `/api/*` to cover a route and its subpaths).
+
+Filtered-out cases are not planned into the run at all; the report counts them
+under `excluded`.
+
+## Dry run
+
+`--dry-run` makes no network connection. It prints one line per request the run
+*would* send - `side scheme endpoint method host sni path`, with `-` for an
+absent SNI - followed by a `TOTAL <n>` line, and exits 0. It honors `--repeat`,
+`--family`, `--exclude-path` and `--max-requests`, so a plan can be reviewed
+before anything is contacted.
 
 ## Exceptions file
 
@@ -98,20 +170,30 @@ trailer headers as `Trailer:<Name>`, `tls.version`, `certificate.<field>`
 | `schema_version` | always `1`. |
 | `verdict` | `EQUIVALENT`, `DIFFERENT` or `INCONCLUSIVE`. |
 | `coverage` | `planned`, `executed`, `equivalent`, `different`, `inconclusive`, `skipped`. |
+| `repeat` | the `--repeat` value this run used. |
+| `body_policy` | the `--body` policy in force (`2xx`, `hash` or `none`). |
+| `excluded` | cases removed by `--family`/`--exclude-path` before the run. |
 | `unsupported_count`, `unsupported` | the plan's unsupported findings. |
 | `expired_exceptions` | ids of exceptions past their `expires` date. |
 | `ignored_fields` | fields left out of every comparison, reported so nothing is invisible. |
 | `cases` | one evaluation per case, in plan order: `case_id`, `outcome`, `differences`, `error`. |
 | `redacted` | `true` unless `--show-sensitive`. |
 
-`--format table` prints a summary block (verdict, coverage, unsupported count,
-expired exceptions, ignored fields) followed by one row per reportable case and
-its differences. A case is reportable when it is not `EQUIVALENT` or when policy
-accepted all of its differences; accepted rows are marked
+The last three fields are additive; `schema_version` stays `1`.
+
+`--format table` prints a summary block (verdict, coverage, body policy, repeat,
+excluded, unsupported count, expired exceptions, ignored fields) followed by one
+row per reportable case and its differences. Each row carries the case `ID`,
+`HOST`, `METHOD`, `PATH` and `FAMILY` beside the outcome, so a difference is
+attributable without opening the plan JSON. A `body` value in the table is
+shortened to `sha256=<first 12 hex> size=<n>`; the JSON report keeps the full
+value. A case is reportable when it is not `EQUIVALENT` or when policy accepted
+all of its differences; accepted rows are marked
 `accepted (<exception id>): <reason>`.
 
-Skipped cases (a cancelled run) are `INCONCLUSIVE` with the error `cancelled`. A
-probe failure on either endpoint is `INCONCLUSIVE` with `VAR-NET-0001`.
+Skipped cases (a cancelled run, or one dropped by `--max-requests`) are
+`INCONCLUSIVE` with the error `cancelled` or `budget`. A probe failure on either
+endpoint is `INCONCLUSIVE` with `VAR-NET-0001`.
 
 ### Coverage
 

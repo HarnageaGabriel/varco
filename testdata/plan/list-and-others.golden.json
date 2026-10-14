@@ -145,6 +145,20 @@
       "note": "Prefix matches by path element, so /api must not match /apivarco (blog behavior 1)"
     },
     {
+      "id": "166bb091d116",
+      "host": "status.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco-unmatched-route",
+      "family": "unmatched-route",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the host declares no Prefix or ImplementationSpecific / path, so an unknown path exercises the default backend"
+    },
+    {
       "id": "a629237a7dc6",
       "host": "status.example.com",
       "scheme": "http",
@@ -172,6 +186,20 @@
         "annotation": "nginx.ingress.kubernetes.io/force-ssl-redirect"
       },
       "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
+    },
+    {
+      "id": "97693a99585f",
+      "host": "varco-unknown.invalid",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/",
+      "family": "default-backend",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "an unknown host exercises the default backend and, over HTTPS, the default certificate"
     }
   ],
   "unsupported": [],

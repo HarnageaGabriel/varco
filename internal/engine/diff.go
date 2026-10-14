@@ -115,7 +115,7 @@ func Diff(ctx context.Context, config DiffConfig, clk clock.Clock, probeFn Probe
 			results[i] = captured
 		}
 		if !failed {
-			outcome.Differences = append(outcome.Differences, compare.Results(path, results[0], results[1], config.IgnoreHeaders)...)
+			outcome.Differences = append(outcome.Differences, compare.Results(path, results[0], results[1], config.IgnoreHeaders, compare.BodyPolicyHash)...)
 		}
 	}
 	return outcome, nil

@@ -13,6 +13,45 @@ import (
 	"github.com/HarnageaGabriel/varco/internal/result"
 )
 
+// BodyPolicy selects when the response body hash is compared. A controller
+// answers an unknown or unmatched route with its own 404/5xx page, so the body
+// of a non-2xx response differs by controller by design; the default policy
+// therefore compares the body only when both endpoints answered 2xx alike.
+type BodyPolicy string
+
+// The three body policies accepted by --body.
+const (
+	// BodyPolicy2xx compares the body only when both statuses are equal and 2xx.
+	BodyPolicy2xx BodyPolicy = "2xx"
+	// BodyPolicyHash always compares the body.
+	BodyPolicyHash BodyPolicy = "hash"
+	// BodyPolicyNone never compares the body.
+	BodyPolicyNone BodyPolicy = "none"
+)
+
+// ParseBodyPolicy validates a --body value.
+func ParseBodyPolicy(value string) (BodyPolicy, error) {
+	switch BodyPolicy(value) {
+	case BodyPolicy2xx, BodyPolicyHash, BodyPolicyNone:
+		return BodyPolicy(value), nil
+	default:
+		return "", fmt.Errorf("body policy %q must be 2xx, hash, or none", value)
+	}
+}
+
+// compareBody reports whether the body hash is compared under policy. An empty
+// policy behaves as the 2xx default.
+func compareBody(policy BodyPolicy, oldResult, newResult result.Result) bool {
+	switch policy {
+	case BodyPolicyNone:
+		return false
+	case BodyPolicyHash:
+		return true
+	default:
+		return oldResult.StatusCode == newResult.StatusCode && oldResult.StatusCode >= 200 && oldResult.StatusCode < 300
+	}
+}
+
 // Difference describes one observable mismatch.
 type Difference struct {
 	Path  string    `json:"path"`
@@ -30,8 +69,9 @@ var comparedHeaders = []string{
 	"x-content-type-options", "x-frame-options",
 }
 
-// Results returns differences sorted by field, honoring additional ignored headers.
-func Results(path string, oldResult, newResult result.Result, ignoreHeaders []string) []Difference {
+// Results returns differences sorted by field, honoring additional ignored
+// headers and the body policy.
+func Results(path string, oldResult, newResult result.Result, ignoreHeaders []string, bodyPolicy BodyPolicy) []Difference {
 	ignored := make(map[string]bool, len(ignoreHeaders)+5)
 	for _, name := range ignoreHeaders {
 		ignored[strings.ToLower(name)] = true
@@ -73,9 +113,11 @@ func Results(path string, oldResult, newResult result.Result, ignoreHeaders []st
 	}
 	add(diag.CodeCompareTLSVersion, "tls.version", oldResult.TLSVersion, newResult.TLSVersion)
 	compareCertificate(add, oldResult.Certificate, newResult.Certificate)
-	oldBody := fmt.Sprintf("sha256=%s size=%d truncated=%t", oldResult.BodySHA256, oldResult.BodySize, oldResult.Truncated)
-	newBody := fmt.Sprintf("sha256=%s size=%d truncated=%t", newResult.BodySHA256, newResult.BodySize, newResult.Truncated)
-	add(diag.CodeCompareBody, "body", oldBody, newBody)
+	if compareBody(bodyPolicy, oldResult, newResult) {
+		oldBody := fmt.Sprintf("sha256=%s size=%d truncated=%t", oldResult.BodySHA256, oldResult.BodySize, oldResult.Truncated)
+		newBody := fmt.Sprintf("sha256=%s size=%d truncated=%t", newResult.BodySHA256, newResult.BodySize, newResult.Truncated)
+		add(diag.CodeCompareBody, "body", oldBody, newBody)
+	}
 	sort.Slice(differences, func(i, j int) bool {
 		if differences[i].Path != differences[j].Path {
 			return differences[i].Path < differences[j].Path

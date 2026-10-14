@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"strings"
 	"time"
 
 	"github.com/HarnageaGabriel/varco/internal/clock"
+	"github.com/HarnageaGabriel/varco/internal/compare"
 	"github.com/HarnageaGabriel/varco/internal/diag"
 	"github.com/HarnageaGabriel/varco/internal/endpoint"
 	"github.com/HarnageaGabriel/varco/internal/engine"
@@ -45,6 +47,14 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	timeout := flags.Duration("timeout", 10*time.Second, "per-request timeout")
 	rate := flags.Float64("rate", 5, "maximum requests per second to either endpoint")
 	concurrency := flags.Int("concurrency", engine.MinConcurrency+3, "cases probed in parallel (1..64)")
+	repeat := flags.Int("repeat", 1, "probe each endpoint this many times per case (1..5)")
+	body := flags.String("body", string(compare.BodyPolicy2xx), "compare the body: 2xx, hash, or none")
+	maxRequests := flags.Int("max-requests", 0, "stop after this many requests (0 means unlimited)")
+	var families, excludePaths stringsFlag
+	flags.Var(&families, "family", "run only cases of this family (repeatable)")
+	flags.Var(&excludePaths, "exclude-path", "exclude cases whose request path matches this glob (repeatable)")
+	dryRun := flags.Bool("dry-run", false, "print the requests a run would send, without sending any")
+	suggestExceptions := flags.String("suggest-exceptions", "", "write an exceptions file for unstable fields (must not already exist)")
 	quiet := flags.Bool("quiet", false, "disable progress lines on stderr")
 	showSensitive := flags.Bool("show-sensitive", false, "show raw sensitive values")
 	if err := flags.Parse(args); err != nil {
@@ -74,6 +84,21 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if err := engine.ValidateConcurrency(*concurrency); err != nil {
 		return configFailure(stderr, fmt.Sprintf("--concurrency: %v", err))
 	}
+	if err := engine.ValidateRepeat(*repeat); err != nil {
+		return configFailure(stderr, fmt.Sprintf("--repeat: %v", err))
+	}
+	bodyPolicy, err := compare.ParseBodyPolicy(*body)
+	if err != nil {
+		return configFailure(stderr, fmt.Sprintf("--body: %v", err))
+	}
+	if *maxRequests < 0 {
+		return configFailure(stderr, "--max-requests must not be negative")
+	}
+	for _, pattern := range excludePaths {
+		if _, err := path.Match(pattern, ""); err != nil {
+			return configFailure(stderr, fmt.Sprintf("--exclude-path %q is not a valid glob: %v", pattern, err))
+		}
+	}
 	if *showSensitive {
 		_, _ = fmt.Fprintln(stderr, "warning: --show-sensitive exposes raw sensitive values")
 	}
@@ -89,7 +114,7 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if code != 0 {
 		return code
 	}
-	probeCases := model.FromPlanCases(manifest.Cases)
+	probeCases, excluded := engine.FilterCases(model.FromPlanCases(manifest.Cases), families, excludePaths)
 	for _, item := range probeCases {
 		if !runMethods[strings.ToUpper(item.Method)] {
 			diagnostic, _ := diag.New(diag.CodeUnsupportedMethod, fmt.Sprintf("case %s uses method %s", item.ID, item.Method))
@@ -112,9 +137,21 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		Timeout:     *timeout,
 		Rate:        *rate,
 		Concurrency: *concurrency,
+		Repeat:      *repeat,
+		BodyPolicy:  bodyPolicy,
+		MaxRequests: *maxRequests,
+		Excluded:    excluded,
 		Exceptions:  exceptionFile,
 		Unsupported: manifest.Unsupported,
 		Now:         clock.Real{}.Now().UTC(),
+	}
+	if *dryRun {
+		requests := engine.DryRun(config)
+		for _, request := range requests {
+			_, _ = fmt.Fprintln(stdout, request.Line())
+		}
+		_, _ = fmt.Fprintf(stdout, "TOTAL %d\n", len(requests))
+		return 0
 	}
 	if !*quiet {
 		config.Progress = func(done, total int, item model.ProbeCase, outcome model.Outcome) {
@@ -135,6 +172,11 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintln(stderr, "report:", err)
 		return 4
 	}
+	if *suggestExceptions != "" {
+		if code := writeSuggestions(*suggestExceptions, runReport, *repeat, config.Now, stderr); code != 0 {
+			return code
+		}
+	}
 	switch runReport.Verdict {
 	case model.OutcomeDifferent:
 		return 1
@@ -143,6 +185,30 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	default:
 		return 0
 	}
+}
+
+// writeSuggestions writes an exceptions file for every field the run observed
+// unstable. It never overwrites an existing file (exit code 2).
+func writeSuggestions(output string, runReport model.RunReport, repeat int, now time.Time, stderr io.Writer) int {
+	data, err := policy.RenderSuggestions(runReport.Unstable, repeat, now)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "suggest-exceptions:", err)
+		return 4
+	}
+	file, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // the path is the file the user named
+	if errors.Is(err, os.ErrExist) {
+		return configFailure(stderr, fmt.Sprintf("--suggest-exceptions: %s already exists; varco never overwrites it", output))
+	}
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "suggest-exceptions:", err)
+		return 4
+	}
+	defer func() { _ = file.Close() }()
+	if _, err := file.Write(data); err != nil {
+		_, _ = fmt.Fprintln(stderr, "suggest-exceptions:", err)
+		return 4
+	}
+	return 0
 }
 
 // loadRunPlan reads either a plan JSON document or manifests and returns the

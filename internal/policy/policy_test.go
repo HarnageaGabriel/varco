@@ -144,7 +144,7 @@ func TestEvaluateAccepts(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			evaluation := policy.Evaluate(test.item, []compare.Difference{difference(test.field)}, file, now)
+			evaluation := policy.Evaluate(test.item, []compare.Difference{difference(test.field)}, file, now, model.Unstable{})
 			if evaluation.CaseID != test.item.ID {
 				t.Fatalf("case id = %s", evaluation.CaseID)
 			}
@@ -195,7 +195,7 @@ func TestEvaluateFieldShorthands(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", test.pattern, err)
 		}
-		evaluation := policy.Evaluate(model.ProbeCase{ID: "c"}, []compare.Difference{difference(test.field)}, file, now)
+		evaluation := policy.Evaluate(model.ProbeCase{ID: "c"}, []compare.Difference{difference(test.field)}, file, now, model.Unstable{})
 		if got := evaluation.Differences[0].Accepted; got != test.want {
 			t.Fatalf("pattern %q field %q accepted = %v, want %v", test.pattern, test.field, got, test.want)
 		}
@@ -209,7 +209,7 @@ func TestEvaluateIgnoresExpired(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	evaluation := policy.Evaluate(model.ProbeCase{ID: "c"}, []compare.Difference{difference("status")}, file, time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC))
+	evaluation := policy.Evaluate(model.ProbeCase{ID: "c"}, []compare.Difference{difference("status")}, file, time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC), model.Unstable{})
 	if evaluation.Differences[0].Accepted || evaluation.Outcome != model.OutcomeDifferent {
 		t.Fatalf("expired exception accepted: %+v", evaluation)
 	}
@@ -225,5 +225,40 @@ func TestIgnoredFields(t *testing.T) {
 	fields[0] = "mutated"
 	if policy.IgnoredFields()[0] != "Date" {
 		t.Fatal("IgnoredFields is not a copy")
+	}
+}
+
+// Source: docs/run.md --suggest-exceptions; the rendered file is deterministic
+// and round-trips through Load, so a suggested exception is usable as written.
+func TestRenderSuggestions(t *testing.T) {
+	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	unstable := []model.UnstableField{
+		{Host: "api.example.com", Field: "header.x-frame-options"},
+		{Host: "*.example.com", Field: "body"},
+	}
+	data, err := policy.RenderSuggestions(unstable, 3, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := policy.Load(data)
+	if err != nil {
+		t.Fatalf("suggestions do not round-trip through Load: %v\n%s", err, data)
+	}
+	if len(file.Exceptions) != 2 {
+		t.Fatalf("exceptions = %d, want 2", len(file.Exceptions))
+	}
+	first := file.Exceptions[0]
+	if !strings.HasPrefix(first.ID, "unstable-") || first.Reason != "observed unstable across 3 observations" {
+		t.Fatalf("first exception = %+v", first)
+	}
+	if first.Match.Host != "api.example.com" || first.Match.Field != "header.x-frame-options" {
+		t.Fatalf("first match = %+v", first.Match)
+	}
+	if !first.Expires.Set || first.Expires.Date.Format("2006-01-02") != "2026-07-01" {
+		t.Fatalf("expiry = %+v", first.Expires)
+	}
+	again, err := policy.RenderSuggestions(unstable, 3, now)
+	if err != nil || string(again) != string(data) {
+		t.Fatalf("render is not deterministic (err=%v)", err)
 	}
 }

@@ -28,6 +28,9 @@ func pathIngress(name, host, path, pathType string, annotations map[string]strin
 func families(result Plan) []string {
 	seen := make([]string, 0, len(result.Cases))
 	for _, item := range result.Cases {
+		if isSyntheticFamily(item.Family) {
+			continue
+		}
 		seen = append(seen, item.Family)
 	}
 	return seen
@@ -36,9 +39,67 @@ func families(result Plan) []string {
 func pathsByFamily(result Plan) map[string][]string {
 	byFamily := make(map[string][]string, len(result.Cases))
 	for _, item := range result.Cases {
+		if isSyntheticFamily(item.Family) {
+			continue
+		}
 		byFamily[item.Family] = append(byFamily[item.Family], item.Path)
 	}
 	return byFamily
+}
+
+// isSyntheticFamily reports whether a family varco derives from the plan as a
+// whole rather than from one declared route. The per-route tests below assert on
+// the declared-route families only; the synthetic families have their own test.
+func isSyntheticFamily(family string) bool {
+	return family == FamilyDefaultBackend || family == FamilyUnmatchedRoute
+}
+
+// TestBuildSyntheticFamilies covers the two plan-wide families: one
+// default-backend probe per scheme the plan uses, and one unmatched-route probe
+// per host that declares no Prefix or ImplementationSpecific "/" path.
+func TestBuildSyntheticFamilies(t *testing.T) {
+	resource := pathIngress("checkout", "api.example.com", "/api", "Prefix", nil)
+	resource.TLS = []ingress.TLS{{Hosts: []string{"api.example.com"}}}
+	result := Build([]ingress.Ingress{resource}, Options{})
+
+	byFamily := make(map[string][]Case)
+	for _, item := range result.Cases {
+		byFamily[item.Family] = append(byFamily[item.Family], item)
+	}
+	defaultBackend := byFamily[FamilyDefaultBackend]
+	if len(defaultBackend) != 2 {
+		t.Fatalf("default-backend cases = %#v, want one per scheme", defaultBackend)
+	}
+	for _, item := range defaultBackend {
+		if item.Host != defaultBackendHost || item.Method != MethodGet || item.Path != "/" {
+			t.Fatalf("default-backend case = %#v", item)
+		}
+		wantSNI := ""
+		if item.Scheme == SchemeHTTPS {
+			wantSNI = defaultBackendHost
+		}
+		if item.SNI != wantSNI {
+			t.Fatalf("default-backend %s SNI = %q", item.Scheme, item.SNI)
+		}
+	}
+	unmatched := byFamily[FamilyUnmatchedRoute]
+	if len(unmatched) != 1 {
+		t.Fatalf("unmatched-route cases = %#v, want one", unmatched)
+	}
+	if unmatched[0].Host != "api.example.com" || unmatched[0].Path != unmatchedRoutePath || unmatched[0].Scheme != SchemeHTTPS {
+		t.Fatalf("unmatched-route case = %#v", unmatched[0])
+	}
+}
+
+// TestBuildUnmatchedRouteSkippedForCatchAll verifies a host with a Prefix "/"
+// path gets no unmatched-route case, because "/" already matches every request.
+func TestBuildUnmatchedRouteSkippedForCatchAll(t *testing.T) {
+	result := Build([]ingress.Ingress{pathIngress("root", "app.example.com", "/", "Prefix", nil)}, Options{})
+	for _, item := range result.Cases {
+		if item.Family == FamilyUnmatchedRoute {
+			t.Fatalf("catch-all host planned an unmatched-route case: %#v", item)
+		}
+	}
 }
 
 func findingCodes(findings []Finding) []diag.Code {
@@ -75,6 +136,9 @@ func TestBuildPrefixPathFamilies(t *testing.T) {
 		t.Fatalf("unexpected findings %#v or warnings %#v", result.Unsupported, result.Warnings)
 	}
 	for _, item := range result.Cases {
+		if isSyntheticFamily(item.Family) {
+			continue
+		}
 		if item.Scheme == SchemeHTTPS && item.SNI != "api.example.com" {
 			t.Fatalf("https case %s has SNI %q", item.Path, item.SNI)
 		}
@@ -155,6 +219,9 @@ func TestBuildHostWideRegex(t *testing.T) {
 func TestBuildNoCaseFlipWithoutRegex(t *testing.T) {
 	result := Build([]ingress.Ingress{pathIngress("plain", "plain.example.com", "/header", "Exact", nil)}, Options{})
 	for _, item := range result.Cases {
+		if isSyntheticFamily(item.Family) {
+			continue
+		}
 		if item.Family == FamilyCaseFlip {
 			t.Fatalf("unexpected case-flip case for a literal host: %#v", item)
 		}
@@ -215,7 +282,7 @@ func TestBuildRegexSample(t *testing.T) {
 				if !reflect.DeepEqual(findingCodes(result.Unsupported), []diag.Code{diag.CodePlanRegexSample}) {
 					t.Fatalf("findings = %#v", result.Unsupported)
 				}
-				if len(result.Cases) != 0 {
+				if len(pathsByFamily(result)) != 0 {
 					t.Fatalf("cases = %#v, want none", result.Cases)
 				}
 				return
@@ -235,7 +302,7 @@ func TestBuildPathWithoutSlashIsRejected(t *testing.T) {
 	if !reflect.DeepEqual(findingCodes(result.Unsupported), []diag.Code{diag.CodePlanManifest}) {
 		t.Fatalf("findings = %#v", result.Unsupported)
 	}
-	if len(result.Cases) != 0 {
+	if len(pathsByFamily(result)) != 0 {
 		t.Fatalf("cases = %#v, want none", result.Cases)
 	}
 }
@@ -243,6 +310,9 @@ func TestBuildPathWithoutSlashIsRejected(t *testing.T) {
 func TestBuildWildcardHost(t *testing.T) {
 	result := Build([]ingress.Ingress{pathIngress("edge", "*.example.com", "/", "Prefix", nil)}, Options{})
 	for _, item := range result.Cases {
+		if isSyntheticFamily(item.Family) {
+			continue
+		}
 		if item.Host != "varco-probe.example.com" {
 			t.Fatalf("case host = %q", item.Host)
 		}
@@ -264,6 +334,9 @@ func TestBuildTLSHostSubstitutionKeepsWildcardWarningOnce(t *testing.T) {
 	}
 	for _, item := range result.Cases {
 		if item.Family == FamilyHTTPRedirect {
+			continue
+		}
+		if isSyntheticFamily(item.Family) {
 			continue
 		}
 		if item.Scheme != SchemeHTTPS || item.SNI != "varco-probe.example.com" {
@@ -292,6 +365,9 @@ func TestBuildDefaultHostAndHostlessFindings(t *testing.T) {
 		t.Fatalf("findings = %#v", with.Unsupported)
 	}
 	for _, item := range with.Cases {
+		if isSyntheticFamily(item.Family) {
+			continue
+		}
 		if item.Host != "internal.svc" {
 			t.Fatalf("case host = %q", item.Host)
 		}
@@ -443,6 +519,9 @@ func TestBuildTLSEntryWithoutHosts(t *testing.T) {
 			}
 			redirects := 0
 			for _, item := range result.Cases {
+				if isSyntheticFamily(item.Family) {
+					continue
+				}
 				if item.Family == FamilyHTTPRedirect {
 					if item.Scheme != SchemeHTTP {
 						t.Fatalf("redirect case uses scheme %s", item.Scheme)

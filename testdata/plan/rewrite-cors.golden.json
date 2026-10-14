@@ -187,6 +187,20 @@
       "note": "enable-cors answers an OPTIONS preflight; pathType ImplementationSpecific is treated as a Prefix-like match; path \"/catalog(/|$)(.*)\" is a regex and is sampled as \"/catalog/varco-probe\"; rewrite-target rewrites the upstream path (blog behavior 3); rewrite-target capture groups enable regex matching for the whole host"
     },
     {
+      "id": "185e94eda35b",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco-unmatched-route",
+      "family": "unmatched-route",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the host declares no Prefix or ImplementationSpecific / path, so an unknown path exercises the default backend"
+    },
+    {
       "id": "87f18bd5d510",
       "host": "shop.example.com",
       "scheme": "http",
@@ -213,6 +227,20 @@
         "path": 0
       },
       "note": "dot segments are resolved before matching (blog behavior 5); pathType ImplementationSpecific is treated as a Prefix-like match; path \"/catalog(/|$)(.*)\" is a regex and is sampled as \"/catalog/varco-probe\"; rewrite-target rewrites the upstream path (blog behavior 3); rewrite-target capture groups enable regex matching for the whole host"
+    },
+    {
+      "id": "97693a99585f",
+      "host": "varco-unknown.invalid",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/",
+      "family": "default-backend",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "an unknown host exercises the default backend and, over HTTPS, the default certificate"
     }
   ],
   "unsupported": [

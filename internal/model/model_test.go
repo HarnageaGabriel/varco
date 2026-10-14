@@ -78,3 +78,28 @@ func TestFromPlanCases(t *testing.T) {
 		t.Fatalf("expected nil headers, got %+v", got[1].Headers)
 	}
 }
+
+// Source: docs/run.md --repeat; Side names the endpoint(s) whose repeated
+// observations made a field unstable, so the acceptance reason is explicit.
+func TestUnstableSide(t *testing.T) {
+	tests := []struct {
+		name   string
+		value  model.Unstable
+		field  string
+		want   string
+		wantOK bool
+	}{
+		{"stable field", model.Unstable{Old: []string{"body"}, New: []string{"body"}}, "status", "", false},
+		{"old only", model.Unstable{Old: []string{"status"}}, "status", "old", true},
+		{"new only", model.Unstable{New: []string{"status"}}, "status", "new", true},
+		{"both sides", model.Unstable{Old: []string{"status"}, New: []string{"status"}}, "status", "old and new", true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, ok := test.value.Side(test.field)
+			if got != test.want || ok != test.wantOK {
+				t.Fatalf("Side(%q) = (%q, %t), want (%q, %t)", test.field, got, ok, test.want, test.wantOK)
+			}
+		})
+	}
+}

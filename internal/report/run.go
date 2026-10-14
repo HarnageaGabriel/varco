@@ -24,6 +24,15 @@ func RunTable(w io.Writer, report model.RunReport, options Options) error {
 		coverage.Planned, coverage.Executed, coverage.Equivalent, coverage.Different, coverage.Inconclusive, coverage.Skipped); err != nil {
 		return err
 	}
+	if _, err := fmt.Fprintf(tw, "BODY POLICY\t%s\n", report.BodyPolicy); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(tw, "REPEAT\t%d\n", report.Repeat); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(tw, "EXCLUDED\t%d\n", report.Excluded); err != nil {
+		return err
+	}
 	if _, err := fmt.Fprintf(tw, "UNSUPPORTED\t%d\n", report.UnsupportedCount); err != nil {
 		return err
 	}
@@ -38,25 +47,54 @@ func RunTable(w io.Writer, report model.RunReport, options Options) error {
 		return err
 	}
 	if len(rows) != 0 {
-		if _, err := fmt.Fprintln(tw, "ID\tOUTCOME\tFIELD\tCODE\tOLD\tNEW\tNOTE"); err != nil {
+		if _, err := fmt.Fprintln(tw, "ID\tHOST\tMETHOD\tPATH\tFAMILY\tOUTCOME\tFIELD\tCODE\tOLD\tNEW\tNOTE"); err != nil {
 			return err
 		}
 	}
 	for _, evaluation := range rows {
 		if len(evaluation.Differences) == 0 {
-			if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", evaluation.CaseID, evaluation.Outcome, "-", "-", "-", "-", runError(evaluation, options)); err != nil {
+			if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				evaluation.CaseID, evaluation.Host, evaluation.Method, evaluation.Path, evaluation.Family,
+				evaluation.Outcome, "-", "-", "-", "-", runError(evaluation, options)); err != nil {
 				return err
 			}
 			continue
 		}
 		for _, difference := range evaluation.Differences {
 			oldValue, newValue := displayValue(difference.Field, difference.Old, difference.New, options)
-			if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", evaluation.CaseID, evaluation.Outcome, difference.Field, difference.Code, oldValue, newValue, differenceNote(difference)); err != nil {
+			oldValue, newValue = shortenBody(difference.Field, oldValue), shortenBody(difference.Field, newValue)
+			if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				evaluation.CaseID, evaluation.Host, evaluation.Method, evaluation.Path, evaluation.Family,
+				evaluation.Outcome, difference.Field, difference.Code, oldValue, newValue, differenceNote(difference)); err != nil {
 				return err
 			}
 		}
 	}
 	return tw.Flush()
+}
+
+// shortenBody keeps the table readable: a body value shows the first 12 hex
+// characters of its sha256 plus its size. The JSON report keeps the full value.
+func shortenBody(field, value string) string {
+	if field != "body" || value == "" {
+		return value
+	}
+	parts := strings.Fields(value)
+	short := make([]string, 0, len(parts))
+	for _, part := range parts {
+		switch {
+		case strings.HasPrefix(part, "sha256="):
+			hash := strings.TrimPrefix(part, "sha256=")
+			if len(hash) > 12 {
+				hash = hash[:12]
+			}
+			short = append(short, "sha256="+hash)
+		case part == "truncated=false":
+		default:
+			short = append(short, part)
+		}
+	}
+	return strings.Join(short, " ")
 }
 
 // RunJSON writes the versioned JSON run report. Every display value is redacted

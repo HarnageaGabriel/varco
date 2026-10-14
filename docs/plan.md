@@ -70,6 +70,16 @@ Each family isolates one behavior so a difference can be attributed to it.
 | `rewrite` | the `base` and `subpath` requests | `rewrite-target` rewrites the upstream path (behavior 3) |
 | `app-root` | `GET /` | the `app-root` annotation redirects `/` to the application root |
 | `redirect-annotation` | `GET path` | `permanent-redirect` and `temporal-redirect` answer with a redirect; the expected code comes from `permanent-redirect-code`/`temporal-redirect-code` (default 301/302) and is recorded in the note |
+| `default-backend` | `GET /` on `varco-unknown.invalid` | an unknown host exercises the default backend and, over HTTPS, the default certificate |
+| `unmatched-route` | `GET /varco-unmatched-route` | a path no rule declares, on a host with no `Prefix`/`ImplementationSpecific` `/` route, must fall to whatever the controller serves for an unmatched path |
+
+Two families are synthetic: they are emitted once per plan, not from a declared
+route. A `default-backend` case is added for every scheme the plan uses (host
+`varco-unknown.invalid`, `GET /`, and SNI `varco-unknown.invalid` over HTTPS). An
+`unmatched-route` case is added for every host that declares no `Prefix` or
+`ImplementationSpecific` `/` path (`GET /varco-unmatched-route`). Both exist so a
+run can see what a controller does before any route matches - an unknown host
+(and, over HTTPS, the default certificate) and an unknown path.
 
 Rule host and path type decide what is emitted: `Exact` paths get `base`,
 `trailing-slash` (unless regex), `case-flip` (when matching is case-insensitive),

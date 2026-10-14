@@ -31,10 +31,18 @@ than by guesswork:
 - `http-redirect` for the HTTP to HTTPS redirect (TLS or `ssl-redirect`);
 - `cors-preflight` for `enable-cors`;
 - `rewrite` for `rewrite-target`, replacing `base` and `subpath` on that Ingress;
-- `app-root` and `redirect-annotation` for the redirect annotations.
+- `app-root` and `redirect-annotation` for the redirect annotations;
+- `default-backend` for the plan-level unknown host (`varco-unknown.invalid`,
+  with SNI `varco-unknown.invalid` over HTTPS) and `unmatched-route` for an
+  unknown path on a host with no catch-all `/` route. These two are synthetic:
+  they are emitted per scheme and per host rather than from a declared route, so
+  what a controller answers before any route matches - the default backend, the
+  default certificate, an unmatched path - is attributable too.
 
-The families are emitted from the manifest only: path type, regex scope, TLS
-entries and annotations decide what exists. Regex scope is computed per host
+The families are emitted from the manifest only - plus the two synthetic
+families above, which come from the plan rather than from a route - because path
+type, regex scope, TLS entries and annotations decide what exists. Regex scope
+is computed per host
 across all Ingress resources, because that is how ingress-nginx behaves
 (behaviors 2 and 3), and the scope is surfaced as a `VAR-PLAN-0006` warning.
 

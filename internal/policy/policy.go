@@ -12,6 +12,8 @@ package policy
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path"
 	"sort"
@@ -27,6 +29,10 @@ import (
 
 // SchemaVersion is the only exceptions-file version varco understands.
 const SchemaVersion = 1
+
+// UnstableExceptionID is the exception id recorded on a difference accepted
+// because repeated observations of one endpoint disagreed.
+const UnstableExceptionID = "auto:unstable"
 
 // ignoredFields are response fields the comparator leaves out of every case.
 // They are reported once per run so nothing is invisible. Source: ADR 0006
@@ -168,14 +174,27 @@ func (e Exception) expired(now time.Time) bool {
 }
 
 // Evaluate applies the policy layer to one case's observed differences. The
-// comparator's differences are all kept; those an exception accepts are marked
-// accepted with the reason and the exception id.
-func Evaluate(item model.ProbeCase, differences []compare.Difference, file File, now time.Time) model.Evaluation {
-	evaluation := model.Evaluation{CaseID: item.ID, Outcome: model.OutcomeEquivalent, Differences: make([]model.Difference, 0, len(differences))}
+// comparator's differences are all kept; those an exception accepts, or that
+// touch a field unstable across repeated observations, are marked accepted with
+// the reason and the exception id.
+func Evaluate(item model.ProbeCase, differences []compare.Difference, file File, now time.Time, unstable model.Unstable) model.Evaluation {
+	evaluation := model.Evaluation{
+		CaseID:      item.ID,
+		Host:        item.Host,
+		Method:      item.Method,
+		Path:        item.Path,
+		Family:      item.Family,
+		Outcome:     model.OutcomeEquivalent,
+		Differences: make([]model.Difference, 0, len(differences)),
+	}
 	accepted := true
 	for _, difference := range differences {
 		converted := model.Difference{Code: difference.Code, Field: difference.Field, Old: difference.Old, New: difference.New}
-		if exception, ok := file.accepting(item, difference, now); ok {
+		if side, ok := unstable.Side(difference.Field); ok {
+			converted.Accepted = true
+			converted.Reason = fmt.Sprintf("unstable: differs between repeated observations of %s", side)
+			converted.ExceptionID = UnstableExceptionID
+		} else if exception, ok := file.accepting(item, difference, now); ok {
 			converted.Accepted = true
 			converted.Reason = exception.Reason
 			converted.ExceptionID = exception.ID
@@ -188,6 +207,47 @@ func Evaluate(item model.ProbeCase, differences []compare.Difference, file File,
 		evaluation.Outcome = model.OutcomeDifferent
 	}
 	return evaluation
+}
+
+// RenderSuggestions builds a valid exceptions file for the (host, field) pairs a
+// run observed unstable. Each entry matches the exact host and field and expires
+// 30 days after now. The output round-trips through Load.
+func RenderSuggestions(unstable []model.UnstableField, observations int, now time.Time) ([]byte, error) {
+	document := suggestionDocument{Version: SchemaVersion, Exceptions: make([]suggestionEntry, 0, len(unstable))}
+	expires := now.UTC().AddDate(0, 0, 30).Format("2006-01-02")
+	for _, item := range unstable {
+		document.Exceptions = append(document.Exceptions, suggestionEntry{
+			ID:      suggestionID(item.Host, item.Field),
+			Reason:  fmt.Sprintf("observed unstable across %d observations", observations),
+			Expires: expires,
+			Match:   suggestionMatch{Host: item.Host, Field: item.Field},
+		})
+	}
+	return yaml.Marshal(document)
+}
+
+// suggestionDocument mirrors the exceptions file so suggestions serialize with
+// the same shape Load accepts.
+type suggestionDocument struct {
+	Version    int               `yaml:"version"`
+	Exceptions []suggestionEntry `yaml:"exceptions"`
+}
+
+type suggestionEntry struct {
+	ID      string          `yaml:"id"`
+	Reason  string          `yaml:"reason"`
+	Expires string          `yaml:"expires"`
+	Match   suggestionMatch `yaml:"match"`
+}
+
+type suggestionMatch struct {
+	Host  string `yaml:"host"`
+	Field string `yaml:"field"`
+}
+
+func suggestionID(host, field string) string {
+	sum := sha256.Sum256([]byte(host + "\x00" + field))
+	return "unstable-" + hex.EncodeToString(sum[:])[:12]
 }
 
 func (f File) accepting(item model.ProbeCase, difference compare.Difference, now time.Time) (Exception, bool) {

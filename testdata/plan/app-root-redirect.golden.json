@@ -2,6 +2,20 @@
   "schema_version": 1,
   "cases": [
     {
+      "id": "97693a99585f",
+      "host": "varco-unknown.invalid",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/",
+      "family": "default-backend",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "an unknown host exercises the default backend and, over HTTPS, the default certificate"
+    },
+    {
       "id": "7da4af0411e2",
       "host": "www.example.org",
       "scheme": "http",

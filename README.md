@@ -100,8 +100,8 @@ varco is **pre-alpha**. Nothing is released yet.
 |---|---|
 | `varco diff` | Implemented: status, `Location`, security and CORS headers, TLS version, certificate and body hash across two endpoints. |
 | `varco plan` | Implemented: reads Ingress manifests and generates deterministic test cases plus unsupported findings. |
-| `varco run` | Implemented: plan execution, exceptions file, and a per-case verdict with coverage (M3, part 1). |
-| M3 the rest | Next: repeated baseline observations for flaky fields, the default-backend family, and a JUnit summary. |
+| `varco run` | Implemented: plan execution, exceptions file, per-case verdict with coverage, repeated observations (`--repeat`) that accept unstable fields and `--suggest-exceptions`, body policy (`--body`), request budget (`--max-requests`), family/path filters, and `--dry-run` (M3, part 2). |
+| M3 the rest | Next: a JUnit summary. |
 | Cluster read, `kind` golden tests, releases | Planned. |
 
 The output formats and flags can still change before the first release.
