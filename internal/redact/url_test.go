@@ -85,3 +85,24 @@ func FuzzURL(f *testing.F) {
 		}
 	})
 }
+
+// Source: docs/adr/0006-redaction.md; probe and run diagnostics pass through
+// Text so no URL-shaped value reaches output unredacted.
+func TestText(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"no url", "probe 10.0.0.2:80: dial tcp: connection refused", "probe 10.0.0.2:80: dial tcp: connection refused"},
+		{"embedded url", "probe failed for https://api.example.com/x?token=secret", "probe failed for https://api.example.com/x?token=REDACTED"},
+		{"empty", "", ""},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := Text(test.input); got != test.want {
+				t.Fatalf("Text(%q) = %q, want %q", test.input, got, test.want)
+			}
+		})
+	}
+}

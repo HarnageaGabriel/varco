@@ -63,8 +63,15 @@ cannot test:
 varco plan -f ./manifests --format table
 ```
 
-Exit status 0 means the two endpoints answered identically, 1 means they
-differ, and 3 means a probe failed. See [exit-codes.md](docs/exit-codes.md).
+Exit status 0 means the two endpoints answered identically (EQUIVALENT), 1 means
+at least one difference was not accepted by policy (DIFFERENT), and 3 means a
+case could not be observed (INCONCLUSIVE); 1 wins over 3. See
+[exit-codes.md](docs/exit-codes.md). To execute a whole plan and accept known
+differences, use `varco run` with an exceptions file:
+
+```sh
+varco run --plan plan.json --old 10.0.0.1 --new 10.0.0.2 --exceptions exceptions.yaml
+```
 
 ## Design goals
 
@@ -93,8 +100,8 @@ varco is **pre-alpha**. Nothing is released yet.
 |---|---|
 | `varco diff` | Implemented: status, `Location`, security and CORS headers, TLS version, certificate and body hash across two endpoints. |
 | `varco plan` | Implemented: reads Ingress manifests and generates deterministic test cases plus unsupported findings. |
-| M2.5 safety and correctness | In progress: redaction by default, cookie attribute comparison, verdict model, and input limits. |
-| `varco run` | Planned for M3. |
+| `varco run` | Implemented: plan execution, exceptions file, and a per-case verdict with coverage (M3, part 1). |
+| M3 the rest | Next: repeated baseline observations for flaky fields, the default-backend family, and a JUnit summary. |
 | Cluster read, `kind` golden tests, releases | Planned. |
 
 The output formats and flags can still change before the first release.

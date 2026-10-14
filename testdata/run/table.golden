@@ -1,0 +1,11 @@
+VERDICT             DIFFERENT
+COVERAGE            planned=3 executed=3 equivalent=1 different=1 inconclusive=1 skipped=0
+UNSUPPORTED         1
+EXPIRED EXCEPTIONS  server-header
+IGNORED FIELDS      Date, Server, Via, X-Request-Id, Set-Cookie values
+CASES 2
+ID            OUTCOME       FIELD                    CODE          OLD                                       NEW                                                             NOTE
+bbbbbbbbbbbb  DIFFERENT     status                   VAR-CMP-0001  200                                       404                                                             -
+bbbbbbbbbbbb  DIFFERENT     header.location          VAR-CMP-0002  https://api.example.com/cb?code=REDACTED  https://api.example.com/cb?code=REDACTED (query values differ)  -
+bbbbbbbbbbbb  DIFFERENT     header.content-encoding  VAR-CMP-0003  gzip                                      br                                                              accepted (compression): Envoy compresses differently
+cccccccccccc  INCONCLUSIVE  -                        -             -                                         -                                                               VAR-NET-0001: probe 10.0.0.2:80: dial tcp: connection refused

@@ -21,7 +21,7 @@ func TestRun(t *testing.T) {
 		{name: "help", args: []string{"help"}, wantCode: 0, wantStdout: "Usage:"},
 		{name: "missing", wantCode: 2, wantStderr: "Usage:"},
 		{name: "unknown", args: []string{"wat"}, wantCode: 2, wantStderr: "unknown subcommand"},
-		{name: "stub", args: []string{"run"}, wantCode: 2, wantStderr: "not implemented"},
+		{name: "run without input", args: []string{"run"}, wantCode: 2, wantStderr: "requires --plan FILE or -f"},
 		{name: "version", args: []string{"version"}, wantCode: 0, wantStdout: "varco " + version.Version},
 		{name: "version args", args: []string{"version", "extra"}, wantCode: 2, wantStderr: "unexpected arguments"},
 	}

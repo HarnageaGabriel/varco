@@ -17,6 +17,20 @@ varco plan -f ./manifests --ingress-class nginx --format table
 varco plan -f - --format json < ingress.yaml
 ```
 
+## varco run
+
+Executes a plan against two endpoints, evaluates the differences through a
+separate policy layer with an optional exceptions file, and prints a verdict per
+[ADR 0007](adr/0007-verdict-model.md). The plan is either
+`varco plan --format json` output or manifests planned in-process.
+
+```sh
+varco run --plan plan.json --old 10.0.0.1 --new 10.0.0.2
+varco run -f ingress.yaml --old 10.0.0.1 --new 10.0.0.2 --exceptions exceptions.yaml --format json
+```
+
+Flags: `--plan FILE|-`, `-f <file|directory|->`, `--ingress-class`, `--default-host`, `--old`, `--new`, `--old-http`, `--old-https`, `--new-http`, `--new-https`, `--exceptions FILE`, `--format (table|json)`, `--output FILE`, `--rate`, `--concurrency`, `--timeout`, `--quiet`, `--show-sensitive`. `--plan` and `-f` are mutually exclusive. The exceptions file reference and the report schema are documented in [run.md](run.md).
+
 ## varco diff
 
 Sends the same request to two numeric IP endpoints and reports differences. `--old` and `--new` accept `IP`, `IPv4:port` or `[IPv6]:port`; hostnames are rejected (`VAR-CFG-0001`). `--host` sets the Host header. `--sni` accepts a hostname or IP address without a port and defaults to the hostname/IP portion of `--host`. Redirects are never followed. Exit codes: see [exit-codes.md](exit-codes.md).
@@ -33,7 +47,7 @@ Flags: `--old --new --host --sni --scheme (http|https) --method --header NAME=VA
 - Probes never use proxies, never decompress (the body hash covers the bytes on the wire and `Content-Encoding` is compared), accept TLS 1.0 and newer, and open a new connection per probe by design. Bodies are hashed up to 256 MiB by default, then reported truncated. Response status lines and headers are limited to 64 KiB; up to eight informational responses are skipped (except `101 Switching Protocols`).
 - Response trailers are compared as headers named `Trailer:<Name>`.
 - Multi-valued response headers are compared value by value, in order; an absent header differs from an empty one (`(absent)` in output).
-- If a probe fails for some path, the remaining paths are still compared, failures are listed on stderr as `VAR-NET-0001`, and the exit code is 3 (it wins over 1).
+- If a probe fails for some path, the remaining paths are still compared and failures are listed on stderr as `VAR-NET-0001`. A probe failure exits 3 only when no path is different; a proven difference on another path exits 1 (a difference outranks missing data, `ADR 0007`).
 - `Location` values are redacted by default: query keys and order remain visible, every query value becomes `REDACTED`, fragments become `REDACTED`, and URL userinfo becomes `REDACTED@`. The raw values are still compared, so redirects that differ only in hidden values remain differences. `--show-sensitive` prints raw Location values and emits a warning to stderr.
 - JSON diff reports include top-level `"redacted": true` by default and `false` with `--show-sensitive`; `schema_version` remains 1.
 - `Set-Cookie` compares cookie names and the `Secure`, `HttpOnly`, `SameSite`, `Path`, `Domain`, `Max-Age` presence, `Expires` presence and `Partitioned` attributes. Cookie values are never compared or printed. Attribute differences use `VAR-CMP-0007`.

@@ -59,16 +59,23 @@ func JSON(w io.Writer, differences []compare.Difference, options Options) error 
 }
 
 func displayDifference(difference compare.Difference, options Options) compare.Difference {
-	if options.ShowSensitive || difference.Field != "header.location" {
-		return difference
-	}
-	oldRaw, newRaw := difference.Old, difference.New
-	difference.Old = redact.URL(oldRaw)
-	difference.New = redact.URL(newRaw)
-	if oldRaw != newRaw && difference.Old == difference.New {
-		difference.New += redactedDifferenceNote(oldRaw, newRaw)
-	}
+	difference.Old, difference.New = displayValue(difference.Field, difference.Old, difference.New, options)
 	return difference
+}
+
+// displayValue redacts a difference's two display values when they are
+// sensitive and the caller did not opt in. Per ADR 0006 it only redacts the
+// Location header; every other field is printed as observed.
+func displayValue(field, oldValue, newValue string, options Options) (string, string) {
+	if options.ShowSensitive || field != "header.location" {
+		return oldValue, newValue
+	}
+	redactedOld := redact.URL(oldValue)
+	redactedNew := redact.URL(newValue)
+	if oldValue != newValue && redactedOld == redactedNew {
+		redactedNew += redactedDifferenceNote(oldValue, newValue)
+	}
+	return redactedOld, redactedNew
 }
 
 func redactedDifferenceNote(oldRaw, newRaw string) string {

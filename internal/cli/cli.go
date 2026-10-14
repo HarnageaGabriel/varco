@@ -30,7 +30,7 @@ Commands:
   help       show this help
   diff       compare two endpoints
   plan       derive probe cases from Ingress manifests
-  run        execute a probe plan (not implemented)
+  run        execute a probe plan against two endpoints
 `
 
 // Run executes args and returns a documented process exit code. stdin is only
@@ -56,8 +56,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	case "plan":
 		return runPlan(args[1:], stdin, stdout, stderr)
 	case "run":
-		_, _ = fmt.Fprintf(stderr, "%s: not implemented\n", args[0])
-		return 2
+		return runRun(args[1:], stdin, stdout, stderr)
 	default:
 		_, _ = fmt.Fprintf(stderr, "unknown subcommand %q\n", args[0])
 		return 2
@@ -172,11 +171,11 @@ func runDiff(args []string, stdout, stderr io.Writer) int {
 		diagnostic, _ := diag.New(diag.CodeEndpointUnreachable, fmt.Sprintf("path of length %d via %s: %v", len(failure.Path), failure.Endpoint, failure.Err))
 		_, _ = fmt.Fprintf(stderr, "%s: %s\n", diagnostic.Code, diagnostic.Message)
 	}
-	if len(outcome.Failures) != 0 {
-		return 3
-	}
 	if len(outcome.Differences) != 0 {
 		return 1
+	}
+	if len(outcome.Failures) != 0 {
+		return 3
 	}
 	return 0
 }

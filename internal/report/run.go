@@ -1,0 +1,135 @@
+package report
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"text/tabwriter"
+
+	"github.com/HarnageaGabriel/varco/internal/model"
+	"github.com/HarnageaGabriel/varco/internal/redact"
+)
+
+// RunTable writes the run summary block followed by one row per
+// non-EQUIVALENT case and its differences. Accepted differences stay visible
+// and are marked with their exception id (ADR 0007).
+func RunTable(w io.Writer, report model.RunReport, options Options) error {
+	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+	coverage := report.Coverage
+	if _, err := fmt.Fprintf(tw, "VERDICT\t%s\n", report.Verdict); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(tw, "COVERAGE\tplanned=%d executed=%d equivalent=%d different=%d inconclusive=%d skipped=%d\n",
+		coverage.Planned, coverage.Executed, coverage.Equivalent, coverage.Different, coverage.Inconclusive, coverage.Skipped); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(tw, "UNSUPPORTED\t%d\n", report.UnsupportedCount); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(tw, "EXPIRED EXCEPTIONS\t%s\n", orDash(report.ExpiredExceptions)); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(tw, "IGNORED FIELDS\t%s\n", strings.Join(report.IgnoredFields, ", ")); err != nil {
+		return err
+	}
+	rows := reportableCases(report)
+	if _, err := fmt.Fprintf(tw, "CASES %d\n", len(rows)); err != nil {
+		return err
+	}
+	if len(rows) != 0 {
+		if _, err := fmt.Fprintln(tw, "ID\tOUTCOME\tFIELD\tCODE\tOLD\tNEW\tNOTE"); err != nil {
+			return err
+		}
+	}
+	for _, evaluation := range rows {
+		if len(evaluation.Differences) == 0 {
+			if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", evaluation.CaseID, evaluation.Outcome, "-", "-", "-", "-", runError(evaluation, options)); err != nil {
+				return err
+			}
+			continue
+		}
+		for _, difference := range evaluation.Differences {
+			oldValue, newValue := displayValue(difference.Field, difference.Old, difference.New, options)
+			if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", evaluation.CaseID, evaluation.Outcome, difference.Field, difference.Code, oldValue, newValue, differenceNote(difference)); err != nil {
+				return err
+			}
+		}
+	}
+	return tw.Flush()
+}
+
+// RunJSON writes the versioned JSON run report. Every display value is redacted
+// per ADR 0006 unless the caller opted into raw values.
+func RunJSON(w io.Writer, report model.RunReport, options Options) error {
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(displayReport(report, options))
+}
+
+// displayReport returns a copy of the report with raw values redacted and the
+// redaction choice recorded.
+func displayReport(report model.RunReport, options Options) model.RunReport {
+	display := report
+	display.Redacted = !options.ShowSensitive
+	display.Unsupported = nonNilFindings(report.Unsupported)
+	display.ExpiredExceptions = nonNilStrings(report.ExpiredExceptions)
+	display.IgnoredFields = nonNilStrings(report.IgnoredFields)
+	display.Cases = make([]model.Evaluation, len(report.Cases))
+	for i, evaluation := range report.Cases {
+		item := evaluation
+		item.Error = redact.Text(evaluation.Error)
+		item.Differences = make([]model.Difference, len(evaluation.Differences))
+		for j, difference := range evaluation.Differences {
+			converted := difference
+			converted.Old, converted.New = displayValue(difference.Field, difference.Old, difference.New, options)
+			item.Differences[j] = converted
+		}
+		display.Cases[i] = item
+	}
+	return display
+}
+
+// reportableCases selects the cases the table lists: every case that is not
+// EQUIVALENT, plus a case that is EQUIVALENT only because policy accepted its
+// differences. ADR 0007 requires accepted differences to stay visible.
+func reportableCases(report model.RunReport) []model.Evaluation {
+	rows := make([]model.Evaluation, 0, len(report.Cases))
+	for _, evaluation := range report.Cases {
+		if evaluation.Outcome != model.OutcomeEquivalent || len(evaluation.Differences) != 0 {
+			rows = append(rows, evaluation)
+		}
+	}
+	return rows
+}
+
+func differenceNote(difference model.Difference) string {
+	if !difference.Accepted {
+		return "-"
+	}
+	return fmt.Sprintf("accepted (%s): %s", difference.ExceptionID, difference.Reason)
+}
+
+func runError(evaluation model.Evaluation, options Options) string {
+	if evaluation.Error == "" {
+		return "-"
+	}
+	if options.ShowSensitive {
+		return evaluation.Error
+	}
+	return redact.Text(evaluation.Error)
+}
+
+func orDash(values []string) string {
+	if len(values) == 0 {
+		return "-"
+	}
+	return strings.Join(values, ", ")
+}
+
+func nonNilStrings(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
+	return values
+}
