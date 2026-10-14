@@ -149,7 +149,8 @@ accepted differences is planned for `varco run`.
 
 ## Getting started
 
-Requires Go 1.26 or newer. There is no release yet, so build from source:
+See [install.md](docs/install.md) for release downloads and verification.
+Requires Go 1.26 or newer; until a release is published, install with Go:
 
 ```sh
 go install github.com/HarnageaGabriel/varco/cmd/varco@latest

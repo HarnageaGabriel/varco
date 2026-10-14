@@ -1,5 +1,7 @@
 version: 2
 
+project_name: varco
+
 builds:
   - id: varco
     main: ./cmd/varco
@@ -13,32 +15,61 @@ builds:
     goarch:
       - amd64
       - arm64
+    flags:
+      - -trimpath
     ldflags:
       - >-
         -s -w
         -X github.com/HarnageaGabriel/varco/internal/version.Version={{.Version}}
         -X github.com/HarnageaGabriel/varco/internal/version.Commit={{.Commit}}
         -X github.com/HarnageaGabriel/varco/internal/version.Date={{.Date}}
+    mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
   - id: varco
     ids: [varco]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [tar.gz]
     format_overrides:
       - goos: windows
         formats: [zip]
+    files:
+      - LICENSE
+      - NOTICE
+      - README.md
 
 checksum:
   name_template: checksums.txt
 
-homebrew_casks:
-  - name: varco
-    repository:
-      owner: HarnageaGabriel
-      name: homebrew-tap
-    homepage: https://github.com/HarnageaGabriel/varco
-    description: Compare HTTP endpoint behavior safely and deterministically
-    license: Apache-2.0
+sboms:
+  - artifacts: archive
+
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    signature: "${artifact}.sigstore.json"
+    args:
+      - sign-blob
+      - --yes
+      - --bundle=${signature}
+      - ${artifact}
+    output: true
+
+# Homebrew: the "brews" section is deprecated in GoReleaser 2.x; the tap will move to
+# "homebrew_casks" or a hand-maintained formula after v0.1.0 (see docs/release-process.md).
 
 changelog:
   use: git
+  sort: asc
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+      order: 0
+    - title: Fixes
+      regexp: '^.*?fix(\(.+\))??!?:.+$'
+      order: 1
+    - title: Other changes
+      order: 999
+
+release:
+  draft: true
