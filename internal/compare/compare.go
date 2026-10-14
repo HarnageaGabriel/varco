@@ -108,7 +108,8 @@ func compareCertificate(add func(diag.Code, string, string, string), oldCert, ne
 		return
 	}
 	fields := []struct{ name, old, new string }{
-		{"subject", oldCert.Subject, newCert.Subject}, {"issuer", oldCert.Issuer, newCert.Issuer},
+		{"subject", oldCert.Subject, newCert.Subject},
+		{"issuer", oldCert.Issuer, newCert.Issuer},
 		{"not_after", oldCert.NotAfter.UTC().Format("2006-01-02T15:04:05Z"), newCert.NotAfter.UTC().Format("2006-01-02T15:04:05Z")},
 		{"fingerprint", oldCert.Fingerprint, newCert.Fingerprint},
 		{"dns_sans", strings.Join(oldCert.DNSNames, ","), strings.Join(newCert.DNSNames, ",")},

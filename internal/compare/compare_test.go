@@ -9,8 +9,10 @@ import (
 
 func TestResults(t *testing.T) {
 	cert := &result.Certificate{Subject: "s", Issuer: "i", NotAfter: time.Unix(1, 0), Fingerprint: "f", DNSNames: []string{"a"}}
-	base := result.Result{StatusCode: 200, TLSVersion: "TLS 1.3", BodySHA256: "a", BodySize: 1, Certificate: cert,
-		Headers: []result.Header{{Name: "Location", Values: []string{"/a"}}, {Name: "Server", Values: []string{"old"}}}}
+	base := result.Result{
+		StatusCode: 200, TLSVersion: "TLS 1.3", BodySHA256: "a", BodySize: 1, Certificate: cert,
+		Headers: []result.Header{{Name: "Location", Values: []string{"/a"}}, {Name: "Server", Values: []string{"old"}}},
+	}
 	tests := []struct {
 		name      string
 		mutate    func(*result.Result)

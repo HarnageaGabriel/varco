@@ -291,7 +291,7 @@ func hasDefaultBackend(node *yaml.Node) bool {
 	if node == nil {
 		return false
 	}
-	return !(node.Kind == yaml.ScalarNode && (node.Tag == "!!null" || node.Value == ""))
+	return node.Kind != yaml.ScalarNode || (node.Tag != "!!null" && node.Value != "")
 }
 
 // stringifyAnnotation converts a scalar annotation value to its string form, so

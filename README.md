@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/assets/varco-logo.png" alt="varco" width="420"></p>
+
 # varco
 
 Prove that the new ingress answers like the old one, route by route, before the DNS cutover.
