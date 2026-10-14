@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/HarnageaGabriel/varco/internal/diag"
 	"github.com/HarnageaGabriel/varco/internal/endpoint"
 	"github.com/HarnageaGabriel/varco/internal/engine"
+	"github.com/HarnageaGabriel/varco/internal/kube"
 	"github.com/HarnageaGabriel/varco/internal/model"
 	"github.com/HarnageaGabriel/varco/internal/plan"
 	"github.com/HarnageaGabriel/varco/internal/policy"
@@ -35,6 +37,12 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	flags.Var(&inputs, "f", "Ingress manifest file, directory, or - for stdin (repeatable)")
 	ingressClass := flags.String("ingress-class", "", "plan only Ingress resources of this class")
 	defaultHost := flags.String("default-host", "", "host for rules that declare none")
+	fromCluster := flags.Bool("from-cluster", false, "read Ingresses and the controller ConfigMap with kubectl get")
+	namespace := flags.String("namespace", "", "read Ingresses from this namespace (default all namespaces)")
+	kubeContext := flags.String("kube-context", "", "kubectl context to use")
+	kubeconfig := flags.String("kubeconfig", "", "kubeconfig file to use")
+	kubeTimeout := flags.Duration("kube-timeout", 30*time.Second, "timeout for one kubectl get")
+	controllerConfigmap := flags.String("controller-configmap", "ingress-nginx/ingress-nginx-controller", "controller ConfigMap as NAMESPACE/NAME (empty disables)")
 	oldValue := flags.String("old", "", "old endpoint IP (port 80 for http, 443 for https)")
 	newValue := flags.String("new", "", "new endpoint IP (port 80 for http, 443 for https)")
 	oldHTTP := flags.String("old-http", "", "old endpoint for http cases (IP:port)")
@@ -66,8 +74,11 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if flags.NArg() != 0 {
 		return configFailure(stderr, "run takes no positional arguments")
 	}
-	if *planPath == "" && len(inputs) == 0 {
-		return configFailure(stderr, "run requires --plan FILE or -f <file|directory|->")
+	if *fromCluster && (*planPath != "" || len(inputs) != 0) {
+		return configFailure(stderr, "use either --from-cluster, --plan, or -f, not both")
+	}
+	if !*fromCluster && *planPath == "" && len(inputs) == 0 {
+		return configFailure(stderr, "run requires --plan FILE or -f <file|directory|->, or --from-cluster")
 	}
 	if *planPath != "" && len(inputs) != 0 {
 		return configFailure(stderr, "use either --plan or -f, not both")
@@ -77,6 +88,9 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	if *timeout <= 0 {
 		return configFailure(stderr, "--timeout must be positive")
+	}
+	if *kubeTimeout <= 0 {
+		return configFailure(stderr, "--kube-timeout must be positive")
 	}
 	if err := engine.ValidateRate(*rate); err != nil {
 		return configFailure(stderr, fmt.Sprintf("--rate: %v", err))
@@ -102,15 +116,21 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if *showSensitive {
 		_, _ = fmt.Fprintln(stderr, "warning: --show-sensitive exposes raw sensitive values")
 	}
-	oldEndpoints, code := endpointPair(*oldValue, *oldHTTP, *oldHTTPS, "--old", stderr)
-	if code != 0 {
-		return code
+	oldEndpoints, oldCode := endpointPair(*oldValue, *oldHTTP, *oldHTTPS, "--old", stderr)
+	if oldCode != 0 {
+		return oldCode
 	}
-	newEndpoints, code := endpointPair(*newValue, *newHTTP, *newHTTPS, "--new", stderr)
-	if code != 0 {
-		return code
+	newEndpoints, newCode := endpointPair(*newValue, *newHTTP, *newHTTPS, "--new", stderr)
+	if newCode != 0 {
+		return newCode
 	}
-	manifest, code := loadRunPlan(*planPath, inputs, stdin, plan.Options{IngressClass: *ingressClass, DefaultHost: *defaultHost}, stderr)
+	var manifest plan.Plan
+	var code int
+	if *fromCluster {
+		manifest, code = loadRunPlanFromCluster(*namespace, *kubeContext, *kubeconfig, *kubeTimeout, *controllerConfigmap, plan.Options{IngressClass: *ingressClass, DefaultHost: *defaultHost}, stderr)
+	} else {
+		manifest, code = loadRunPlan(*planPath, inputs, stdin, plan.Options{IngressClass: *ingressClass, DefaultHost: *defaultHost}, stderr)
+	}
 	if code != 0 {
 		return code
 	}
@@ -185,6 +205,25 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	default:
 		return 0
 	}
+}
+
+func loadRunPlanFromCluster(namespace, contextName, kubeconfig string, timeout time.Duration, controllerRef string, options plan.Options, stderr io.Writer) (plan.Plan, int) {
+	return loadRunPlanFromClusterWithRunner(kube.DefaultRunner{KubeConfig: kubeconfig, ContextName: contextName}, namespace, timeout, controllerRef, options, stderr)
+}
+
+func loadRunPlanFromClusterWithRunner(runner kube.Runner, namespace string, timeout time.Duration, controllerRef string, options plan.Options, stderr io.Writer) (plan.Plan, int) {
+	resources, controllerConfig, code := loadClusterPlanWithRunner(runner, namespace, timeout, controllerRef, stderr)
+	if code != 0 {
+		return plan.Plan{}, code
+	}
+	result := plan.Build(resources, options)
+	result.Warnings = append(result.Warnings, plan.ConfigMapWarnings(controllerConfig)...)
+	sortWarnings(result.Warnings)
+	return result, 0
+}
+
+func sortWarnings(warnings []plan.Warning) {
+	sort.Slice(warnings, func(i, j int) bool { return warningLess(warnings[i], warnings[j]) })
 }
 
 // writeSuggestions writes an exceptions file for every field the run observed

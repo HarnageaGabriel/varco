@@ -140,6 +140,7 @@ func TestPlanUsageErrors(t *testing.T) {
 		{name: "bad format", args: []string{"-f", filepath.Join(planInputDir(), "rewrite-cors.yaml"), "--format", "yaml"}, wantStderr: "--format must be table or json"},
 		{name: "positional argument", args: []string{"manifest.yaml"}, wantStderr: "no positional arguments"},
 		{name: "missing file", args: []string{"-f", filepath.Join(planInputDir(), "absent.yaml")}, wantStderr: "cannot read"},
+		{name: "cluster and file", args: []string{"--from-cluster", "-f", filepath.Join(planInputDir(), "hostless.yaml")}, wantStderr: "use either --from-cluster"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -154,6 +155,13 @@ func TestPlanUsageErrors(t *testing.T) {
 				t.Fatalf("stdout = %q, want nothing", stdout)
 			}
 		})
+	}
+}
+
+func TestPlanClusterFlagsMutuallyExclusive(t *testing.T) {
+	code, _, stderr := runPlanCLI(t, "", "--from-cluster", "-f", "-")
+	if code != 2 || !strings.Contains(stderr, "VAR-CFG-0001") || !strings.Contains(stderr, "use either --from-cluster") {
+		t.Fatalf("code=%d stderr=%q", code, stderr)
 	}
 }
 
