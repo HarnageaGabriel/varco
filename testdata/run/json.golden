@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "verdict": "DIFFERENT",
+  "coverage": {
+    "planned": 3,
+    "executed": 3,
+    "equivalent": 1,
+    "different": 1,
+    "inconclusive": 1,
+    "skipped": 0
+  },
+  "unsupported_count": 1,
+  "unsupported": [
+    {
+      "code": "VAR-PLAN-0001",
+      "ingress": "api",
+      "annotation": "nginx.ingress.kubernetes.io/proxy-read-timeout",
+      "message": "timeouts are not observable black-box"
+    }
+  ],
+  "expired_exceptions": [
+    "server-header"
+  ],
+  "ignored_fields": [
+    "Date",
+    "Server",
+    "Via",
+    "X-Request-Id",
+    "Set-Cookie values"
+  ],
+  "cases": [
+    {
+      "case_id": "aaaaaaaaaaaa",
+      "outcome": "EQUIVALENT",
+      "differences": []
+    },
+    {
+      "case_id": "bbbbbbbbbbbb",
+      "outcome": "DIFFERENT",
+      "differences": [
+        {
+          "code": "VAR-CMP-0001",
+          "field": "status",
+          "old": "200",
+          "new": "404",
+          "accepted": false
+        },
+        {
+          "code": "VAR-CMP-0002",
+          "field": "header.location",
+          "old": "https://api.example.com/cb?code=REDACTED",
+          "new": "https://api.example.com/cb?code=REDACTED (query values differ)",
+          "accepted": false
+        },
+        {
+          "code": "VAR-CMP-0003",
+          "field": "header.content-encoding",
+          "old": "gzip",
+          "new": "br",
+          "accepted": true,
+          "reason": "Envoy compresses differently",
+          "exception_id": "compression"
+        }
+      ]
+    },
+    {
+      "case_id": "cccccccccccc",
+      "outcome": "INCONCLUSIVE",
+      "differences": [],
+      "error": "VAR-NET-0001: probe 10.0.0.2:80: dial tcp: connection refused"
+    }
+  ],
+  "redacted": true
+}

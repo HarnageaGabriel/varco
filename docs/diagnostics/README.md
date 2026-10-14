@@ -5,6 +5,7 @@
 | Code | Severity | Title |
 |---|---|---|
 | [VAR-CFG-0001](VAR-CFG-0001.md) | error | Invalid flag |
+| [VAR-CFG-0002](VAR-CFG-0002.md) | error | Invalid exceptions file |
 | [VAR-CMP-0001](VAR-CMP-0001.md) | info | Status differs |
 | [VAR-CMP-0002](VAR-CMP-0002.md) | info | Location differs |
 | [VAR-CMP-0003](VAR-CMP-0003.md) | info | Header differs |

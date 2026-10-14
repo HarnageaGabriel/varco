@@ -35,6 +35,8 @@ linters:
             - "**/internal/compare/**/*.go"
             - "**/internal/report/**/*.go"
             - "**/internal/redact/**/*.go"
+            - "**/internal/model/**/*.go"
+            - "**/internal/policy/**/*.go"
             - "!$test"
           deny:
             - pkg: "net/http$"

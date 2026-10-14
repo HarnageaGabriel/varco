@@ -13,6 +13,8 @@ type Code string
 const (
 	// CodeInvalidFlag reports an invalid command-line flag.
 	CodeInvalidFlag Code = "VAR-CFG-0001"
+	// CodeExceptionsFile reports an exceptions file that cannot be parsed or is invalid.
+	CodeExceptionsFile Code = "VAR-CFG-0002"
 	// CodeEndpointUnreachable reports a failed connection to an endpoint.
 	CodeEndpointUnreachable Code = "VAR-NET-0001"
 	// CodeUnsupportedMethod reports an unsafe or unsupported HTTP method.
@@ -133,6 +135,7 @@ func List() []Entry {
 		{Code: CodeCompareBody, Area: "CMP", Title: "Body differs", Severity: SeverityInfo, Description: "The response body hash, captured size, or truncation state differs.", Remediation: "Review the response content returned by each endpoint."},
 		{Code: CodeCompareCookie, Area: "CMP", Title: "Cookie attributes differ", Severity: SeverityInfo, Description: "The endpoints set different cookie names or cookie security and scope attributes. Cookie values are never compared or reported.", Remediation: "Align the Set-Cookie attributes, or confirm that the difference is expected."},
 		{Code: CodeInvalidFlag, Area: "CFG", Title: "Invalid flag", Severity: SeverityError, Description: "A command-line flag is unknown or has an invalid value.", Remediation: "Correct the flag name or value and retry."},
+		{Code: CodeExceptionsFile, Area: "CFG", Title: "Invalid exceptions file", Severity: SeverityError, Description: "The --exceptions file cannot be parsed, uses an unsupported version, or defines an exception with a missing id, a duplicate id, a missing reason, an invalid date, or an invalid glob.", Remediation: "Fix the exceptions file and retry; see docs/run.md for the schema."},
 		{Code: CodeEndpointUnreachable, Area: "NET", Title: "Endpoint unreachable", Severity: SeverityError, Description: "The probe could not connect to the configured endpoint.", Remediation: "Verify the endpoint address, port, and network reachability."},
 		{Code: CodeUnsupportedMethod, Area: "RUN", Title: "Unsupported method", Severity: SeverityError, Description: "The requested HTTP method is not enabled for this run.", Remediation: "Use GET, HEAD, or OPTIONS, or explicitly opt in to the method for this case and run."},
 		{Code: CodePlanAnnotationNotTestable, Area: "PLAN", Title: "Annotation not testable", Severity: SeverityWarning, Description: "An Ingress annotation changes behavior that varco cannot observe black-box, or is unknown to varco.", Remediation: "Verify the annotation manually against the target controller, or confirm it is intentionally out of scope."},
