@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="docs/assets/varco-logo.png" alt="varco" width="420">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/varco-logo-dark.svg">
+    <img src="docs/assets/varco-logo.svg" alt="varco" width="360">
+  </picture>
 </p>
 
 <h3 align="center">Prove that the new ingress answers like the old one, route by route,<br>
