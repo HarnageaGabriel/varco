@@ -193,43 +193,6 @@ metadata:
 			wantErr:    true,
 			wantErrSub: "VAR-PLAN-0003",
 		},
-		{
-			name: "nested list depth is bounded",
-			input: `
-apiVersion: v1
-kind: List
-items:
-  - apiVersion: v1
-    kind: List
-    items:
-      - apiVersion: v1
-        kind: List
-        items:
-          - apiVersion: v1
-            kind: List
-            items:
-              - apiVersion: v1
-                kind: List
-                items:
-                  - apiVersion: v1
-                    kind: List
-                    items:
-                      - apiVersion: v1
-                        kind: List
-                        items:
-                          - apiVersion: v1
-                            kind: List
-                            items:
-                              - apiVersion: v1
-                                kind: List
-                                items:
-                                  - apiVersion: v1
-                                    kind: List
-                                    items: []
-`,
-			wantErr:    true,
-			wantErrSub: "list nesting deeper",
-		},
 	}
 
 	for _, test := range tests {
@@ -258,6 +221,71 @@ items:
 				t.Fatalf("Parse() = %#v, want %#v", got, test.want)
 			}
 		})
+	}
+}
+
+func TestParseLimits(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		message string
+	}{
+		{
+			name:    "deep flow sequence",
+			input:   strings.Repeat("[", 10000) + "0" + strings.Repeat("]", 10000),
+			message: "maximum depth of 64",
+		},
+		{
+			name:    "many nodes",
+			input:   "[" + strings.Repeat("0,", maxDocumentNodes) + "0]",
+			message: "100000-node limit",
+		},
+		{
+			name:    "oversized input",
+			input:   "#" + strings.Repeat("a", MaxInputBytes),
+			message: "8388608-byte limit",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := Parse(strings.NewReader(test.input))
+			if err == nil || !strings.Contains(err.Error(), test.message) {
+				t.Fatalf("Parse() error = %v, want message containing %q", err, test.message)
+			}
+			var diagnostic *diag.Error
+			if !errors.As(err, &diagnostic) || diagnostic.Diagnostic.Code != diag.CodePlanManifest {
+				t.Fatalf("Parse() error = %v, want %s", err, diag.CodePlanManifest)
+			}
+		})
+	}
+}
+
+func TestIngressKey(t *testing.T) {
+	if got := (Ingress{Name: "api"}).Key(); got != "api" {
+		t.Fatalf("Key() = %q, want api", got)
+	}
+	if got := (Ingress{Namespace: "prod", Name: "api"}).Key(); got != "prod/api" {
+		t.Fatalf("Key() = %q, want prod/api", got)
+	}
+}
+
+func TestStringifyAnnotationScalarTypes(t *testing.T) {
+	tests := []struct {
+		value any
+		want  string
+	}{
+		{value: "value", want: "value"},
+		{value: true, want: "true"},
+		{value: int(2), want: "2"},
+		{value: int64(-3), want: "-3"},
+		{value: uint64(4), want: "4"},
+		{value: float64(1.25), want: "1.25"},
+	}
+	for _, test := range tests {
+		got, err := stringifyAnnotation("test", test.value)
+		if err != nil || got != test.want {
+			t.Fatalf("stringifyAnnotation(%T(%v)) = %q, %v; want %q, nil", test.value, test.value, got, err, test.want)
+		}
 	}
 }
 

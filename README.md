@@ -93,7 +93,8 @@ varco is **pre-alpha**. Nothing is released yet.
 |---|---|
 | `varco diff` | Implemented: status, `Location`, security and CORS headers, TLS version, certificate and body hash across two endpoints. |
 | `varco plan` | Implemented: reads Ingress manifests and generates deterministic test cases plus unsupported findings. |
-| `varco run` | Next: executes a plan against two endpoints, with JSON and JUnit reports and an exceptions file. |
+| M2.5 safety and correctness | In progress: redaction by default, cookie attribute comparison, verdict model, and input limits. |
+| `varco run` | Planned for M3. |
 | Cluster read, `kind` golden tests, releases | Planned. |
 
 The output formats and flags can still change before the first release.
@@ -162,8 +163,10 @@ Usage details and examples are in [usage.md](docs/usage.md).
 - [x] **M0** Repository scaffold, CI, diagnostic-code registry, ADRs
 - [x] **M1** `varco diff` for one or more routes on two endpoints
 - [x] **M2** `varco plan` from Ingress manifests
-- [ ] **M3** `varco run`: execute a plan, JSON and JUnit reports, exceptions file
-- [ ] **M4** Read Ingresses from a cluster (read-only), a `kind` test cluster with ingress-nginx and Envoy Gateway side by side and golden reports, GoReleaser, Homebrew and a krew plugin
+- [ ] **M2.5 Safety and correctness** Redaction by default, cookie attribute comparison, verdict model, and input limits (in progress)
+- [ ] **M3 `varco run`** Comparator and policy evaluator, exceptions file, repeated baseline observations for flaky fields, default-backend case family, body compared on 2xx by default, request budget and path exclusion, and JSON/JUnit/markdown summary
+- [ ] **M4 Production readiness** `kind` end-to-end tests with pinned ingress-nginx and Envoy Gateway, TLS version range and ALPN probes, opt-in TLS security policy, read-only cluster and ingress-nginx ConfigMap read, generic versus ingress-nginx planner rules, macOS and arm64 CI, signed releases with provenance, Homebrew, and krew
+- [ ] **M5 Adoption** Explanations for known ingress-nginx quirks, offline HTML report, and CI summaries
 
 Out of scope: manifest translation, shadowing production traffic, load testing
 and authenticated flows. varco only checks the answer to an anonymous request,

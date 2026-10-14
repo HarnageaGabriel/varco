@@ -157,6 +157,5 @@ never planned and never guessed.
 ## Known limitations
 
 - `ssl-redirect` on a host without `spec.tls` plans an `http-redirect` case and cases that are still served with `scheme: http`, so some cases differ only by family and note.
-- YAML node nesting is depth-capped only for `kind: List`; a deeply nested flow document is not bounded further.
 - When `--ingress-class` excludes an Ingress, that resource is dropped without a finding, and regex scope is computed over the included resources only, so an excluded `use-regex` Ingress changes the host scope silently.
 - Not-testable annotation classification is name-based and is not reclassified per annotation.

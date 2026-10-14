@@ -3,6 +3,7 @@ package ingress
 import (
 	"bytes"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -24,6 +25,7 @@ func FuzzParse(f *testing.F) {
 		"- a\n- b\n",
 		"{",
 		"",
+		strings.Repeat("[", 10000) + "0" + strings.Repeat("]", 10000),
 	}
 	for _, seed := range seeds {
 		f.Add([]byte(seed))

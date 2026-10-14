@@ -34,13 +34,29 @@ jobs:
       - name: Test with race detector
         if: runner.os == 'Windows'
         run: go test -race ./...
-      - name: Enforce 70% coverage floor
+      - name: Enforce coverage floors
         if: runner.os == 'Linux'
         shell: bash
         run: |
           coverage=$(go tool cover -func=coverage.out | awk '/^total:/ {gsub("%", "", $3); print $3}')
           echo "total coverage: ${coverage}%"
           awk -v coverage="$coverage" 'BEGIN { exit !(coverage >= 70) }'
+
+          check_package() {
+            package="$1"
+            floor="$2"
+            coverage=$(go test -cover "./${package}" | sed -n 's/.*coverage: \([0-9.]*\)%.*/\1/p')
+            echo "${package} coverage: ${coverage}% (floor: ${floor}%)"
+            awk -v coverage="$coverage" -v floor="$floor" 'BEGIN { exit !(coverage >= floor) }'
+          }
+
+          check_package internal/plan 90
+          check_package internal/compare 90
+          check_package internal/ingress 90
+          check_package internal/endpoint 90
+          check_package internal/redact 90
+          check_package internal/probe 85
+          check_package internal/report 80
 
   lint:
     name: Lint

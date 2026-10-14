@@ -7,6 +7,7 @@
 package ingress
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -18,8 +19,15 @@ import (
 	"github.com/HarnageaGabriel/varco/internal/diag"
 )
 
-// APIVersion is the only Ingress API version varco understands.
-const APIVersion = "networking.k8s.io/v1"
+const (
+	// APIVersion is the only Ingress API version varco understands.
+	APIVersion = "networking.k8s.io/v1"
+	// MaxInputBytes is the maximum manifest input accepted by the parser and CLI.
+	MaxInputBytes = 8 << 20
+
+	maxDocumentDepth = 64
+	maxDocumentNodes = 100000
+)
 
 // Recognized resource kinds.
 const (
@@ -28,9 +36,6 @@ const (
 	// KindList is a Kubernetes list, for example the output of `kubectl get -o yaml`.
 	KindList = "List"
 )
-
-// maxDocumentDepth bounds List nesting so a crafted manifest cannot recurse forever.
-const maxDocumentDepth = 8
 
 // Ingress is one Ingress resource reduced to the fields varco plans from.
 type Ingress struct {
@@ -79,7 +84,15 @@ type TLS struct {
 // with a VAR-PLAN-0003 diagnostic, so extensions/v1beta1 is never silently
 // planned with v1 semantics.
 func Parse(r io.Reader) ([]Ingress, error) {
-	decoder := yaml.NewDecoder(r)
+	content, err := io.ReadAll(io.LimitReader(r, MaxInputBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(content) > MaxInputBytes {
+		return nil, manifestError("manifest input exceeds the %d-byte limit", MaxInputBytes)
+	}
+
+	decoder := yaml.NewDecoder(bytes.NewReader(content))
 	var resources []Ingress
 	for index := 1; ; index++ {
 		var document yaml.Node
@@ -90,7 +103,10 @@ func Parse(r io.Reader) ([]Ingress, error) {
 		if err != nil {
 			return nil, manifestError("document %d: %v", index, err)
 		}
-		found, err := parseRoot(document, 0)
+		if err := validateDocument(document); err != nil {
+			return nil, fmt.Errorf("document %d: %w", index, err)
+		}
+		found, err := parseRoot(document)
 		if err != nil {
 			return nil, fmt.Errorf("document %d: %w", index, err)
 		}
@@ -98,7 +114,35 @@ func Parse(r io.Reader) ([]Ingress, error) {
 	}
 }
 
-func parseRoot(document yaml.Node, depth int) ([]Ingress, error) {
+// validateDocument bounds every YAML node kind before typed decoding. The
+// explicit stack avoids making validation itself vulnerable to deep input.
+func validateDocument(document yaml.Node) error {
+	type pendingNode struct {
+		node  *yaml.Node
+		depth int
+	}
+	stack := []pendingNode{{node: &document, depth: 1}}
+	nodes := 0
+	for len(stack) > 0 {
+		last := len(stack) - 1
+		pending := stack[last]
+		stack = stack[:last]
+
+		nodes++
+		if nodes > maxDocumentNodes {
+			return manifestError("YAML document exceeds the %d-node limit", maxDocumentNodes)
+		}
+		if pending.depth > maxDocumentDepth {
+			return manifestError("YAML document nesting exceeds the maximum depth of %d", maxDocumentDepth)
+		}
+		for index := len(pending.node.Content) - 1; index >= 0; index-- {
+			stack = append(stack, pendingNode{node: pending.node.Content[index], depth: pending.depth + 1})
+		}
+	}
+	return nil
+}
+
+func parseRoot(document yaml.Node) ([]Ingress, error) {
 	root, ok := documentRoot(document)
 	if !ok {
 		return nil, nil
@@ -115,7 +159,7 @@ func parseRoot(document yaml.Node, depth int) ([]Ingress, error) {
 	}
 	switch header.Kind {
 	case KindList:
-		return parseList(root, depth)
+		return parseList(root)
 	case KindIngress:
 	default:
 		return nil, nil
@@ -135,19 +179,16 @@ func parseRoot(document yaml.Node, depth int) ([]Ingress, error) {
 }
 
 // parseList walks the items of a kind: List document without decoding them into
-// typed structs first, so a nested non-Ingress item is ignored cheaply. Nesting
-// is bounded so a crafted manifest cannot recurse without end.
-func parseList(root yaml.Node, depth int) ([]Ingress, error) {
-	if depth >= maxDocumentDepth {
-		return nil, manifestError("list nesting deeper than %d documents", maxDocumentDepth)
-	}
+// typed structs first, so a nested non-Ingress item is ignored cheaply. The
+// document validation performed first bounds this recursion.
+func parseList(root yaml.Node) ([]Ingress, error) {
 	items, ok := mappingValue(root, "items")
 	if !ok || items.Kind != yaml.SequenceNode {
 		return nil, nil
 	}
 	var resources []Ingress
 	for _, item := range items.Content {
-		found, err := parseRoot(*item, depth+1)
+		found, err := parseRoot(*item)
 		if err != nil {
 			return nil, err
 		}
