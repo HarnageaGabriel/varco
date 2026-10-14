@@ -42,7 +42,7 @@ func TestResultsFields(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			oldResult, newResult := mk(), mk()
 			test.mutate(&newResult)
-			got := Results("/", oldResult, newResult, test.ignore)
+			got := Results("/", oldResult, newResult, test.ignore, BodyPolicyHash)
 			if len(got) != len(test.fields) {
 				t.Fatalf("got %#v", got)
 			}
@@ -58,7 +58,7 @@ func TestResultsFields(t *testing.T) {
 func TestResultsSorted(t *testing.T) {
 	a := result.Result{StatusCode: 200, BodySHA256: "a"}
 	b := result.Result{StatusCode: 500, BodySHA256: "b"}
-	got := Results("/", a, b, nil)
+	got := Results("/", a, b, nil, BodyPolicyHash)
 	if len(got) != 2 || got[0].Field != "body" || got[1].Field != "status" {
 		t.Fatalf("got %#v", got)
 	}
@@ -84,7 +84,7 @@ func TestResultsHeaderValues(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := Results("/", test.old, test.new, nil)
+			got := Results("/", test.old, test.new, nil, BodyPolicyHash)
 			if len(got) != test.diffs {
 				t.Fatalf("got %#v", got)
 			}
@@ -99,7 +99,7 @@ func TestResultsHeaderValues(t *testing.T) {
 func TestResultsContentEncoding(t *testing.T) {
 	a := result.Result{StatusCode: 200}
 	b := result.Result{StatusCode: 200, Headers: []result.Header{{Name: "Content-Encoding", Values: []string{"gzip"}}}}
-	got := Results("/", a, b, nil)
+	got := Results("/", a, b, nil, BodyPolicyHash)
 	if len(got) != 1 || got[0].Field != "header.content-encoding" {
 		t.Fatalf("got %#v", got)
 	}
@@ -128,7 +128,7 @@ func TestResultsSetCookieAttributes(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := Results("/", test.old, test.new, test.ignore)
+			got := Results("/", test.old, test.new, test.ignore, BodyPolicyHash)
 			if (len(got) != 0) != test.wantDiff {
 				t.Fatalf("Results() = %#v", got)
 			}

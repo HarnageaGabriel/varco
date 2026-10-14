@@ -503,6 +503,21 @@
       "note": "an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2); path \"^/legacy\" is a regex and is sampled as \"/legacy\""
     },
     {
+      "id": "146119939324",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/varco-unmatched-route",
+      "family": "unmatched-route",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the host declares no Prefix or ImplementationSpecific / path, so an unknown path exercises the default backend"
+    },
+    {
       "id": "a088f7945713",
       "host": "api.example.com",
       "scheme": "http",
@@ -619,6 +634,35 @@
         "path": 0
       },
       "note": "dot segments are resolved before matching (blog behavior 5); an Exact path on a host where use-regex or rewrite-target is active is compiled as a prefix regex (blog behavior 2); path \"^/legacy\" is a regex and is sampled as \"/legacy\""
+    },
+    {
+      "id": "97693a99585f",
+      "host": "varco-unknown.invalid",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/",
+      "family": "default-backend",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "an unknown host exercises the default backend and, over HTTPS, the default certificate"
+    },
+    {
+      "id": "8a758aefe1c9",
+      "host": "varco-unknown.invalid",
+      "sni": "varco-unknown.invalid",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/",
+      "family": "default-backend",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "an unknown host exercises the default backend and, over HTTPS, the default certificate"
     }
   ],
   "unsupported": [],

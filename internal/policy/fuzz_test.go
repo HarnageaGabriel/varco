@@ -31,6 +31,7 @@ func FuzzLoad(f *testing.F) {
 			[]compare.Difference{{Field: "status", Old: "200", New: "404"}},
 			file,
 			now,
+			model.Unstable{},
 		)
 	})
 }

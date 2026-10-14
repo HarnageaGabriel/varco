@@ -9,6 +9,9 @@
     "inconclusive": 1,
     "skipped": 0
   },
+  "repeat": 3,
+  "body_policy": "2xx",
+  "excluded": 1,
   "unsupported_count": 1,
   "unsupported": [
     {
@@ -60,6 +63,22 @@
           "accepted": true,
           "reason": "Envoy compresses differently",
           "exception_id": "compression"
+        },
+        {
+          "code": "VAR-CMP-0003",
+          "field": "header.etag",
+          "old": "v1",
+          "new": "v2",
+          "accepted": true,
+          "reason": "unstable: differs between repeated observations of new",
+          "exception_id": "auto:unstable"
+        },
+        {
+          "code": "VAR-CMP-0006",
+          "field": "body",
+          "old": "sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa size=1234 truncated=false",
+          "new": "sha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb size=1234 truncated=false",
+          "accepted": false
         }
       ]
     },

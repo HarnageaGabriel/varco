@@ -20,6 +20,9 @@ func runFixture() model.RunReport {
 		SchemaVersion:    1,
 		Verdict:          model.OutcomeDifferent,
 		Coverage:         model.Coverage{Planned: 3, Executed: 3, Equivalent: 1, Different: 1, Inconclusive: 1},
+		Repeat:           3,
+		BodyPolicy:       "2xx",
+		Excluded:         1,
 		UnsupportedCount: 1,
 		Unsupported: []plan.Finding{{
 			Code: diag.CodePlanAnnotationNotTestable, Ingress: "api", Annotation: "nginx.ingress.kubernetes.io/proxy-read-timeout", Message: "timeouts are not observable black-box",
@@ -27,17 +30,23 @@ func runFixture() model.RunReport {
 		ExpiredExceptions: []string{"server-header"},
 		IgnoredFields:     policy.IgnoredFields(),
 		Cases: []model.Evaluation{
-			{CaseID: "aaaaaaaaaaaa", Outcome: model.OutcomeEquivalent, Differences: []model.Difference{}},
+			{CaseID: "aaaaaaaaaaaa", Host: "app.example.com", Method: "GET", Path: "/", Family: "base", Outcome: model.OutcomeEquivalent, Differences: []model.Difference{}},
 			{
 				CaseID:  "bbbbbbbbbbbb",
+				Host:    "api.example.com",
+				Method:  "GET",
+				Path:    "/cb",
+				Family:  "base",
 				Outcome: model.OutcomeDifferent,
 				Differences: []model.Difference{
 					{Code: diag.CodeCompareStatus, Field: "status", Old: "200", New: "404"},
 					{Code: diag.CodeCompareLocation, Field: "header.location", Old: "https://api.example.com/cb?code=old-secret", New: "https://api.example.com/cb?code=new-secret"},
 					{Code: diag.CodeCompareHeader, Field: "header.content-encoding", Old: "gzip", New: "br", Accepted: true, Reason: "Envoy compresses differently", ExceptionID: "compression"},
+					{Code: diag.CodeCompareHeader, Field: "header.etag", Old: "v1", New: "v2", Accepted: true, Reason: "unstable: differs between repeated observations of new", ExceptionID: "auto:unstable"},
+					{Code: diag.CodeCompareBody, Field: "body", Old: "sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa size=1234 truncated=false", New: "sha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb size=1234 truncated=false"},
 				},
 			},
-			{CaseID: "cccccccccccc", Outcome: model.OutcomeInconclusive, Differences: []model.Difference{}, Error: "VAR-NET-0001: probe 10.0.0.2:80: dial tcp: connection refused"},
+			{CaseID: "cccccccccccc", Host: "api.example.com", Method: "GET", Path: "/cb", Family: "base", Outcome: model.OutcomeInconclusive, Differences: []model.Difference{}, Error: "VAR-NET-0001: probe 10.0.0.2:80: dial tcp: connection refused"},
 		},
 	}
 }

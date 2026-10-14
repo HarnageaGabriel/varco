@@ -58,6 +58,10 @@ const (
 	FamilyAppRoot = "app-root"
 	// FamilyRedirectAnnotation probes permanent-redirect and temporal-redirect.
 	FamilyRedirectAnnotation = "redirect-annotation"
+	// FamilyDefaultBackend probes the default backend with an unknown host.
+	FamilyDefaultBackend = "default-backend"
+	// FamilyUnmatchedRoute probes an unknown path on a host with no catch-all.
+	FamilyUnmatchedRoute = "unmatched-route"
 )
 
 // AnnotationIngressClass is the legacy class annotation varco honors next to
@@ -86,6 +90,17 @@ const wildcardProbeHost = "varco-probe"
 // probeSegment is appended below a Prefix-like path to test subpath routing.
 const probeSegment = "varco-probe"
 
+// defaultBackendHost is the host of the default-backend probe: no rule declares
+// it, so an ingress controller must answer it from its default backend.
+const defaultBackendHost = "varco-unknown.invalid"
+
+// unmatchedRoutePath is the unknown path of the unmatched-route case.
+const unmatchedRoutePath = "/varco-unmatched-route"
+
+// syntheticIngress labels cases varco derives from the plan as a whole rather
+// than from one Ingress resource.
+const syntheticIngress = "varco"
+
 // regexMeta are the characters that make ingress-nginx match a path as a
 // regular expression. A dot is deliberately absent: /v1.0 is a common literal.
 const regexMeta = "^$()[]{}*+?|\\"
@@ -94,6 +109,7 @@ const regexMeta = "^$()[]{}*+?|\\"
 type builder struct {
 	options    Options
 	plan       Plan
+	included   []ingress.Ingress
 	hosts      [][]resolvedRule
 	regexHosts map[string]string
 	tlsHosts   map[string]bool
@@ -136,6 +152,90 @@ func (b *builder) run(resources []ingress.Ingress) {
 	for index, resource := range included {
 		b.addResource(index, resource)
 	}
+	b.included = included
+	b.addSyntheticCases()
+}
+
+// addSyntheticCases appends the two plan-wide families: one default-backend
+// probe per scheme the plan uses, and one unmatched-route probe per host that
+// declares no Prefix or ImplementationSpecific "/" path. Both are derived from
+// the plan as a whole, not from one Ingress, and carry the synthetic source.
+func (b *builder) addSyntheticCases() {
+	schemes := make(map[string]bool, 2)
+	for _, item := range b.plan.Cases {
+		schemes[item.Scheme] = true
+	}
+	for _, scheme := range []string{SchemeHTTP, SchemeHTTPS} {
+		if !schemes[scheme] {
+			continue
+		}
+		sni := ""
+		if scheme == SchemeHTTPS {
+			sni = defaultBackendHost
+		}
+		b.appendCase(Case{
+			Host:   defaultBackendHost,
+			SNI:    sni,
+			Scheme: scheme,
+			Method: MethodGet,
+			Path:   "/",
+			Family: FamilyDefaultBackend,
+			Source: Source{Ingress: syntheticIngress},
+			Note:   "an unknown host exercises the default backend and, over HTTPS, the default certificate",
+		})
+	}
+	hasCatchAll := make(map[string]bool)
+	var hostOrder []string
+	seen := make(map[string]bool)
+	for index, resource := range b.included {
+		for ruleIndex, rule := range resource.Rules {
+			resolved := b.hosts[index][ruleIndex]
+			if !resolved.ok {
+				continue
+			}
+			if !seen[resolved.host] {
+				seen[resolved.host] = true
+				hostOrder = append(hostOrder, resolved.host)
+			}
+			for _, candidate := range rule.Paths {
+				if isCatchAllPath(candidate) {
+					hasCatchAll[resolved.host] = true
+				}
+			}
+		}
+	}
+	for _, host := range hostOrder {
+		if hasCatchAll[host] {
+			continue
+		}
+		scheme, sni := SchemeHTTP, ""
+		if b.tlsHosts[host] {
+			scheme, sni = SchemeHTTPS, host
+		}
+		b.appendCase(Case{
+			Host:   host,
+			SNI:    sni,
+			Scheme: scheme,
+			Method: MethodGet,
+			Path:   unmatchedRoutePath,
+			Family: FamilyUnmatchedRoute,
+			Source: Source{Ingress: syntheticIngress},
+			Note:   "the host declares no Prefix or ImplementationSpecific / path, so an unknown path exercises the default backend",
+		})
+	}
+}
+
+// isCatchAllPath reports whether a path matches every request on its host: a
+// Prefix or ImplementationSpecific path of "/" (an omitted path counts as "/").
+func isCatchAllPath(candidate ingress.Path) bool {
+	if candidate.PathType != "Prefix" && candidate.PathType != "ImplementationSpecific" {
+		return false
+	}
+	declared := candidate.Path
+	if declared == "" {
+		declared = "/"
+	}
+	return declared == "/"
 }
 
 // resolveHosts resolves the host of every rule, records the findings for rules
