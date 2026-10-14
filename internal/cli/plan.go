@@ -130,12 +130,8 @@ func parseInputs(paths []string, stdin io.Reader, stderr io.Writer) ([]ingress.I
 	return resources, 0
 }
 
-// maxManifestBytes caps one manifest input, file or stream, so a huge or
-// unending input cannot exhaust memory. It is generous for real manifests.
-const maxManifestBytes = 8 << 20
-
 // parseInput reads one manifest input: stdin for -, a file otherwise. The
-// input is read through io.LimitReader so it can never exceed maxManifestBytes.
+// input is read through io.LimitReader so it can never exceed the parser's cap.
 func parseInput(path string, stdin io.Reader) ([]ingress.Ingress, error) {
 	var reader io.Reader
 	if path == stdinInput {
@@ -148,11 +144,11 @@ func parseInput(path string, stdin io.Reader) ([]ingress.Ingress, error) {
 		defer func() { _ = file.Close() }()
 		reader = file
 	}
-	content, err := io.ReadAll(io.LimitReader(reader, maxManifestBytes+1))
+	content, err := io.ReadAll(io.LimitReader(reader, ingress.MaxInputBytes+1))
 	if err != nil {
 		return nil, err
 	}
-	if len(content) > maxManifestBytes {
+	if len(content) > ingress.MaxInputBytes {
 		return nil, manifestTooLarge()
 	}
 	return ingress.Parse(bytes.NewReader(content))
@@ -160,7 +156,7 @@ func parseInput(path string, stdin io.Reader) ([]ingress.Ingress, error) {
 
 // manifestTooLarge builds the VAR-PLAN-0003 diagnostic for an oversized input.
 func manifestTooLarge() error {
-	message := fmt.Sprintf("manifest is larger than the %d-byte limit varco reads", maxManifestBytes)
+	message := fmt.Sprintf("manifest is larger than the %d-byte limit varco reads", ingress.MaxInputBytes)
 	diagnostic, err := diag.New(diag.CodePlanManifest, message)
 	if err != nil {
 		return errors.New(message)

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/HarnageaGabriel/varco/internal/ingress"
 )
 
 // planInputDir is the shared manifest corpus. Sources: the ingress-nginx
@@ -215,7 +217,7 @@ func (f fakeDirEntry) Info() (fs.FileInfo, error) { return nil, nil }
 // is a VAR-PLAN-0003 error, not a partial plan.
 func TestPlanRejectsOversizedFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "big.yaml")
-	content := "#" + strings.Repeat("a", maxManifestBytes)
+	content := "#" + strings.Repeat("a", ingress.MaxInputBytes)
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
