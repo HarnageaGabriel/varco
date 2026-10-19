@@ -1,10 +1,13 @@
-.PHONY: build test lint vuln cover tidy fmt docs docs-check release-check
+.PHONY: build test fuzz lint vuln cover tidy fmt docs docs-check release-check
 
 build:
 	go build -trimpath ./...
 
 test:
 	go test -race ./...
+
+fuzz:
+	sh scripts/fuzz.sh
 
 lint:
 	golangci-lint run ./...

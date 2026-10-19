@@ -2,3 +2,5 @@ varco
 Copyright 2026 The varco Authors
 
 This product includes software developed by the varco contributors.
+
+- go.yaml.in/yaml/v3 v3.0.5 | MIT and Apache-2.0 | https://pkg.go.dev/go.yaml.in/yaml/v3
