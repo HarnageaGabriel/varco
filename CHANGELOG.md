@@ -4,6 +4,7 @@ All notable changes are documented here. Format: [Keep a Changelog](https://keep
 
 ## [Unreleased]
 
+- Fix the `FuzzURL` oracle false positive: query values that also appear as the path or query separator no longer trip the leak detector, which now re-parses the redacted output and asserts its non-query parts, query keys, redacted fragment, and per-value `REDACTED` state instead of substring matching.
 - Add source-linked explanations to `varco run`: `DIFFERENT` cases matching known ingress-nginx behavior patterns gain stable explanations, suggested fixes and source URLs in indented table rows and the additive JSON `explanations` array, while equivalent and unrelated cases remain unchanged.
 - Add the signed and attested release workflow, draft GoReleaser configuration,
   release verification and install documentation, and planned Homebrew and
