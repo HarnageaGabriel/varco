@@ -46,10 +46,10 @@ type responseShape struct {
 }
 
 type responseSnapshot struct {
-	status    int
-	headers   []result.Header
-	bodySize  int64
-	bodySHA   string
+	status   int
+	headers  []result.Header
+	bodySize int64
+	bodySHA  string
 }
 
 func longValidHeaderResponse() string {
@@ -221,7 +221,7 @@ func startExactResponse(t *testing.T, wire, method string) Request {
 
 func netHTTPResponseSnapshot(t *testing.T, request Request) responseSnapshot {
 	t.Helper()
-	httpRequest, err := http.NewRequest(request.Method, "http://"+request.Endpoint.String()+request.Path, nil)
+	httpRequest, err := http.NewRequestWithContext(context.Background(), request.Method, "http://"+request.Endpoint.String()+request.Path, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,7 +265,7 @@ func TestReadResponseRejectsOutOfRangeStatus(t *testing.T) {
 	for _, status := range []string{"000", "099", "600", "999"} {
 		t.Run(status, func(t *testing.T) {
 			wire := "HTTP/1.1 " + status + " Invalid\r\nContent-Length: 0\r\n\r\n"
-			response, err := readResponse(strings.NewReader(wire), http.MethodGet)
+			response, err := readResponse(strings.NewReader(wire), http.MethodGet) //nolint:bodyclose // the response is nil on the error path under test.
 			if response != nil || !errors.Is(err, errInvalidResponse) {
 				t.Fatalf("readResponse() = (%v, %v), want nil, %v", response, err, errInvalidResponse)
 			}
@@ -283,6 +283,9 @@ func FuzzReadResponse(f *testing.F) {
 		"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n-1\r\n",
 		"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nTransfer-Encoding: identity\r\n\r\n0\r\n\r\n",
 		"HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n",
+		"HTTP/1.1\t200 OK\r\n\r\n",
+		"HTTP/1.1 200 OK\r\nContent-Length: +5\r\n\r\nhello",
+		"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello",
 	} {
 		f.Add([]byte(seed))
 	}
@@ -298,7 +301,7 @@ func FuzzReadResponse(f *testing.F) {
 
 		client, server := net.Pipe()
 		defer func() { _ = client.Close() }()
-		if err := client.SetDeadline(time.Now().Add(2*time.Second)); err != nil { //nolint:forbidigo // fuzz enforces a real connection deadline.
+		if err := client.SetDeadline(time.Now().Add(2 * time.Second)); err != nil { //nolint:forbidigo // fuzz enforces a real connection deadline.
 			t.Fatal(err)
 		}
 		writerDone := make(chan struct{})
@@ -314,7 +317,7 @@ func FuzzReadResponse(f *testing.F) {
 		}
 		resultCh := make(chan readResult, 1)
 		go func() {
-			response, err := readResponse(client, http.MethodGet)
+			response, err := readResponse(client, http.MethodGet) //nolint:bodyclose // only the status code is inspected; the pipe is closed below.
 			resultCh <- readResult{response: response, err: err}
 		}()
 		select {

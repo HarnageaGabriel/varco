@@ -132,7 +132,7 @@ func Do(ctx context.Context, request Request) (result.Result, error) {
 	if _, err := io.WriteString(rw, buildRequest(method, request)); err != nil {
 		return result.Result{}, ioFailure(ctx, request.Endpoint.String(), "write request", err)
 	}
-	response, err := readResponse(rw, method)
+	response, err := readResponse(rw, method) //nolint:bodyclose // body is consumed by capture; the connection is closed by defer conn.Close.
 	if err != nil {
 		if errors.Is(err, errTooManyInterim) {
 			return result.Result{}, fmt.Errorf("probe %s: too many interim responses", request.Endpoint.String())

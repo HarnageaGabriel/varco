@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("HTTP/1.1 200 OK\r\nContent-Length: +5\r\n\r\nhello")
