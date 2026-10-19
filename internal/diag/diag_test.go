@@ -21,6 +21,7 @@ func TestRegistry(t *testing.T) {
 		{CodeCompareCertificate, "CMP", SeverityInfo},
 		{CodeCompareBody, "CMP", SeverityInfo},
 		{CodeCompareCookie, "CMP", SeverityInfo},
+		{CodePlanConfigMap, "PLAN", SeverityWarning},
 	}
 
 	for _, test := range tests {

@@ -85,6 +85,8 @@ func TestRunCommand(t *testing.T) {
 		{"malformed plan", "not json", []string{"--plan", "-", "--old", oldAddr, "--new", oldAddr}, 2, "", "cannot parse plan JSON"},
 		{"unsafe method", planJSON(t, []plan.Case{{ID: "a", Host: "h", Scheme: "http", Method: "POST", Path: "/"}}), []string{"--plan", "-", "--old", oldAddr, "--new", oldAddr}, 2, "", "VAR-RUN-0001"},
 		{"no input", "", []string{"--old", oldAddr, "--new", oldAddr}, 2, "", "requires --plan FILE or -f"},
+		{"cluster and plan", oneCase, []string{"--from-cluster", "--plan", "-", "--old", oldAddr, "--new", oldAddr}, 2, "", "use either --from-cluster"},
+		{"cluster and file", oneCase, []string{"--from-cluster", "-f", manifestPath, "--old", oldAddr, "--new", oldAddr}, 2, "", "use either --from-cluster"},
 		{"both inputs", oneCase, []string{"--plan", "-", "-f", manifestPath, "--old", oldAddr, "--new", oldAddr}, 2, "", "not both"},
 		{"missing endpoint", oneCase, []string{"--plan", "-", "--old", oldAddr}, 2, "", "--new is required"},
 		{"bad concurrency", oneCase, []string{"--plan", "-", "--concurrency", "99", "--old", oldAddr, "--new", oldAddr}, 2, "", "--concurrency"},

@@ -15,3 +15,5 @@ make fmt test lint vuln
 ```
 
 Rules for code, tests, diagnostics and review are in [CONVENTIONS.md](CONVENTIONS.md). Architecture decisions live in `docs/adr/`.
+
+Governance responsibilities are summarized in [docs/maintainers.md](docs/maintainers.md).
