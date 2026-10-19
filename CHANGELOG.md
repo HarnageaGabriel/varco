@@ -4,6 +4,9 @@ All notable changes are documented here. Format: [Keep a Changelog](https://keep
 
 ## [Unreleased]
 
+- Add nightly race and fuzz checks, dependency review, third-party license
+  notices, trademark and issue-contact policies, CODEOWNERS, and maintainer
+  governance documentation.
 - Add source-linked explanations to `varco run`: `DIFFERENT` cases matching known ingress-nginx behavior patterns gain stable explanations, suggested fixes and source URLs in indented table rows and the additive JSON `explanations` array, while equivalent and unrelated cases remain unchanged.
 - Add the signed and attested release workflow, draft GoReleaser configuration,
   release verification and install documentation, and planned Homebrew and
