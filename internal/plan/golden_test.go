@@ -2,6 +2,7 @@ package plan_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"os"
 	"path/filepath"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/HarnageaGabriel/varco/internal/ingress"
 	"github.com/HarnageaGabriel/varco/internal/plan"
-	"github.com/HarnageaGabriel/varco/internal/report"
 )
 
 var update = flag.Bool("update", false, "update golden files")
@@ -32,8 +32,51 @@ func goldenInputs() []string {
 	}
 }
 
+func genericGoldenInputs() []string {
+	return []string{
+		"multi-regex-host.yaml",
+		"rewrite-cors.yaml",
+	}
+}
+
 func goldenPath(input string) string {
 	return filepath.Join("..", "..", "testdata", "plan", strings.TrimSuffix(input, filepath.Ext(input))+".golden.json")
+}
+
+func genericGoldenPath(input string) string {
+	return filepath.Join("..", "..", "testdata", "plan", strings.TrimSuffix(input, filepath.Ext(input))+".generic.golden.json")
+}
+
+func renderPlanJSON(result plan.Plan) ([]byte, error) {
+	document := struct {
+		SchemaVersion int            `json:"schema_version"`
+		Profile       string         `json:"profile"`
+		Cases         []plan.Case    `json:"cases"`
+		Unsupported   []plan.Finding `json:"unsupported"`
+		Warnings      []plan.Warning `json:"warnings"`
+	}{
+		SchemaVersion: 1,
+		Profile:       result.Profile,
+		Cases:         result.Cases,
+		Unsupported:   result.Unsupported,
+		Warnings:      result.Warnings,
+	}
+	if document.Cases == nil {
+		document.Cases = []plan.Case{}
+	}
+	if document.Unsupported == nil {
+		document.Unsupported = []plan.Finding{}
+	}
+	if document.Warnings == nil {
+		document.Warnings = []plan.Warning{}
+	}
+	var rendered bytes.Buffer
+	encoder := json.NewEncoder(&rendered)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(document); err != nil {
+		return nil, err
+	}
+	return rendered.Bytes(), nil
 }
 
 func parseFile(t *testing.T, input string) []ingress.Ingress {
@@ -53,34 +96,44 @@ func parseFile(t *testing.T, input string) []ingress.Ingress {
 func TestGoldenPlans(t *testing.T) {
 	for _, input := range goldenInputs() {
 		t.Run(input, func(t *testing.T) {
-			resources := parseFile(t, input)
-			first := plan.Build(resources, plan.Options{})
-			second := plan.Build(resources, plan.Options{})
-			var rendered bytes.Buffer
-			if err := report.PlanJSON(&rendered, first); err != nil {
-				t.Fatal(err)
-			}
-			var repeat bytes.Buffer
-			if err := report.PlanJSON(&repeat, second); err != nil {
-				t.Fatal(err)
-			}
-			if !bytes.Equal(rendered.Bytes(), repeat.Bytes()) {
-				t.Fatal("planning the same input twice produced different JSON")
-			}
-			path := goldenPath(input)
-			if *update {
-				if err := os.WriteFile(path, rendered.Bytes(), 0o644); err != nil {
-					t.Fatal(err)
-				}
-			}
-			want, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatalf("%v (run `go test ./internal/plan -update` to create it)", err)
-			}
-			if !bytes.Equal(bytes.ReplaceAll(want, []byte("\r\n"), []byte("\n")), rendered.Bytes()) {
-				t.Fatalf("golden mismatch for %s; run `go test ./internal/plan -update` and review:\n%s", input, rendered.String())
-			}
+			assertGoldenPlan(t, input, plan.Options{}, goldenPath(input))
 		})
+	}
+}
+
+func TestGenericGoldenPlans(t *testing.T) {
+	for _, input := range genericGoldenInputs() {
+		t.Run(input, func(t *testing.T) {
+			assertGoldenPlan(t, input, plan.Options{Profile: plan.ProfileGeneric}, genericGoldenPath(input))
+		})
+	}
+}
+
+func assertGoldenPlan(t *testing.T, input string, options plan.Options, path string) {
+	t.Helper()
+	resources := parseFile(t, input)
+	first, err := renderPlanJSON(plan.Build(resources, options))
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := renderPlanJSON(plan.Build(resources, options))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(first, second) {
+		t.Fatal("planning the same input twice produced different JSON")
+	}
+	if *update {
+		if err := os.WriteFile(path, first, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("%v (run `go test ./internal/plan -update` to create it)", err)
+	}
+	if !bytes.Equal(bytes.ReplaceAll(want, []byte("\r\n"), []byte("\n")), first) {
+		t.Fatalf("golden mismatch for %s; run `go test ./internal/plan -update` and review:\n%s", input, first)
 	}
 }
 

@@ -1,0 +1,410 @@
+{
+  "schema_version": 1,
+  "profile": "generic",
+  "cases": [
+    {
+      "id": "c63914fea468",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "//api/v1/items(/|$)(.*)",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "spec.tls covers the host, so varco plans the plain-HTTP redirect case"
+    },
+    {
+      "id": "93ecf7df2471",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "//api/v1/items(/|$)(.*)",
+      "family": "double-slash",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "repeated slashes are normalized or answered with 301 (blog behavior 5)"
+    },
+    {
+      "id": "4fb1823f20fd",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "//header",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "spec.tls covers the host, so varco plans the plain-HTTP redirect case"
+    },
+    {
+      "id": "ccf84d948321",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "//header",
+      "family": "double-slash",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "repeated slashes are normalized or answered with 301 (blog behavior 5)"
+    },
+    {
+      "id": "ca6d5ee71d9f",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "//health",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "spec.tls covers the host, so varco plans the plain-HTTP redirect case"
+    },
+    {
+      "id": "ec50c395b930",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "//health",
+      "family": "double-slash",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "repeated slashes are normalized or answered with 301 (blog behavior 5)"
+    },
+    {
+      "id": "7673a552f010",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/api/v1/items(/|$)(.*)",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "spec.tls covers the host, so varco plans the plain-HTTP redirect case"
+    },
+    {
+      "id": "15302b9d2585",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/api/v1/items(/|$)(.*)",
+      "family": "base",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 0
+      }
+    },
+    {
+      "id": "fb2d61f3da63",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/api/v1/items(/|$)(.*)/",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "spec.tls covers the host, so varco plans the plain-HTTP redirect case"
+    },
+    {
+      "id": "702703eb991c",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/api/v1/items(/|$)(.*)/",
+      "family": "trailing-slash",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "declared without a trailing slash; probes the same path with an extra slash"
+    },
+    {
+      "id": "d5929146e778",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/header",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "spec.tls covers the host, so varco plans the plain-HTTP redirect case"
+    },
+    {
+      "id": "1df7ac2b4790",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/header",
+      "family": "base",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      }
+    },
+    {
+      "id": "22eee9394a02",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/header/",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "spec.tls covers the host, so varco plans the plain-HTTP redirect case"
+    },
+    {
+      "id": "8d6751e69a1e",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/header/",
+      "family": "trailing-slash",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "declared without a trailing slash; probes the same path with an extra slash"
+    },
+    {
+      "id": "98b2823070be",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/health",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "spec.tls covers the host, so varco plans the plain-HTTP redirect case"
+    },
+    {
+      "id": "cf43437bb28b",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/health",
+      "family": "base",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 1
+      }
+    },
+    {
+      "id": "4fadd35ecc3f",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/health/",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "spec.tls covers the host, so varco plans the plain-HTTP redirect case"
+    },
+    {
+      "id": "a7b12e8fd03c",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/health/",
+      "family": "trailing-slash",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "declared without a trailing slash; probes the same path with an extra slash"
+    },
+    {
+      "id": "146119939324",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/varco-unmatched-route",
+      "family": "unmatched-route",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the host declares no Prefix or ImplementationSpecific / path, so an unknown path exercises the default backend"
+    },
+    {
+      "id": "117744ca9b43",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco/../api/v1/items(/|$)(.*)",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "spec.tls covers the host, so varco plans the plain-HTTP redirect case"
+    },
+    {
+      "id": "5bf74ee136c7",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/varco/../api/v1/items(/|$)(.*)",
+      "family": "dot-segments",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "dot segments are resolved before matching (blog behavior 5)"
+    },
+    {
+      "id": "b18a312bf10b",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco/../header",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "spec.tls covers the host, so varco plans the plain-HTTP redirect case"
+    },
+    {
+      "id": "9ff15b5937bd",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/varco/../header",
+      "family": "dot-segments",
+      "source": {
+        "ingress": "prod/checkout-header",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "dot segments are resolved before matching (blog behavior 5)"
+    },
+    {
+      "id": "8b3d5c32374b",
+      "host": "api.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco/../health",
+      "family": "http-redirect",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "spec.tls covers the host, so varco plans the plain-HTTP redirect case"
+    },
+    {
+      "id": "74fc510e3ea4",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/varco/../health",
+      "family": "dot-segments",
+      "source": {
+        "ingress": "prod/checkout-api",
+        "rule": 0,
+        "path": 1
+      },
+      "note": "dot segments are resolved before matching (blog behavior 5)"
+    },
+    {
+      "id": "97693a99585f",
+      "host": "varco-unknown.invalid",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/",
+      "family": "default-backend",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "an unknown host exercises the default backend and, over HTTPS, the default certificate"
+    },
+    {
+      "id": "8a758aefe1c9",
+      "host": "varco-unknown.invalid",
+      "sni": "varco-unknown.invalid",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/",
+      "family": "default-backend",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "an unknown host exercises the default backend and, over HTTPS, the default certificate"
+    }
+  ],
+  "unsupported": [
+    {
+      "code": "VAR-PLAN-0003",
+      "ingress": "prod/checkout-header",
+      "path": "^/legacy",
+      "message": "path \"^/legacy\" does not start with / and is not a valid request target"
+    }
+  ],
+  "warnings": [
+    {
+      "code": "VAR-PLAN-0009",
+      "ingress": "prod/checkout-api",
+      "message": "2 annotations ignored by the generic profile"
+    }
+  ]
+}

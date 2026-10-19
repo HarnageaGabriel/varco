@@ -15,6 +15,7 @@ guidance, [Before you migrate](https://kubernetes.io/blog/2026/02/27/ingress-ngi
 ```sh
 varco plan -f ingress.yaml --format json
 varco plan -f ./manifests -f - < api.yaml --format table
+varco plan -f api.yaml --profile generic --format json
 varco plan -f api.yaml --ingress-class nginx --default-host fallback.example.com
 ```
 
@@ -23,7 +24,8 @@ and only regular `*.yaml`, `*.yml` and `*.json` files are read, sorted by path;
 symlinks and other non-regular files are skipped), `--format (table|json)`,
 `--ingress-class NAME` (matches `spec.ingressClassName` or the
 `kubernetes.io/ingress.class` annotation), `--default-host HOST` (used by rules
-that declare no host). One input, file or stream, is read through an 8 MiB cap;
+that declare no host), and `--profile (nginx|generic)` (default `nginx`; also
+available on `varco run -f`). One input, file or stream, is read through an 8 MiB cap;
 a larger input is rejected with `VAR-PLAN-0003`.
 
 Exit codes: `0` when a plan was produced, even if it contains unsupported
@@ -43,14 +45,38 @@ and manifest parse errors, `4` if the report cannot be written.
 
 ## Output
 
-`--format json` writes a stable envelope with `schema_version: 1`, `cases`,
-`unsupported` and `warnings`; `--format table` prints the same three sections.
+`--format json` writes a stable envelope with `schema_version: 1`, `profile`,
+`cases`, `unsupported` and `warnings`; `--format table` prints the case and diagnostic sections.
 Cases are ordered by `(host, path, scheme, method, family, id)` and identical
 cases are de-duplicated. `id` is the first 12 hex characters of the SHA-256 of
 the canonical case (host, SNI, scheme, method, path, sorted headers, family,
 source, note), so an ID is stable across runs and independent of generation
 order. No output order depends on map iteration, and no case carries a clock, a
 credential header or a method other than `GET`, `HEAD` or `OPTIONS`.
+
+## Profiles
+
+The planner has two selectable profiles, recorded as `profile` in JSON:
+
+- `nginx` is the default and preserves the ingress-nginx knowledge documented
+  in [ADR 0005](adr/0005-plan-case-families.md): annotation-driven cases,
+  host-wide regex scope, rewrite, CORS, app-root, redirect annotations, and
+  ingress-nginx trailing-slash notes.
+- `generic` contains only cases valid for an HTTP proxy without ingress-nginx
+  quirks: `base`, `subpath`, `prefix-boundary` with Kubernetes element-wise
+  `Prefix` semantics, `trailing-slash`, `dot-segments`, `double-slash`,
+  `http-redirect` only when `spec.tls` covers the host, `default-backend`, and
+  `unmatched-route`.
+
+The generic profile never reads `nginx.ingress.kubernetes.io/*` values and never
+emits `case-flip`, `rewrite`, `app-root`, `cors-preflight`, or
+`redirect-annotation` cases. It also emits no `VAR-PLAN-0001`,
+`VAR-PLAN-0006`, or `VAR-PLAN-0007` findings from those annotations. Instead,
+each included Ingress with annotations gets one `VAR-PLAN-0009` warning naming
+the ignored annotation count. The profile is selected with `--profile` on
+`varco plan` and on `varco run -f`; an invalid value is `VAR-CFG-0001` and
+exits 2. Profile selection and its rationale are recorded in
+[ADR 0008](adr/0008-planner-profiles.md).
 
 ## Case families
 
@@ -135,12 +161,16 @@ Warnings are the `warnings` array: conditions that qualify the cases.
 | `VAR-PLAN-0004` | a wildcard host planned with the concrete label `varco-probe` |
 | `VAR-PLAN-0006` | host-wide regex scope caused by `use-regex` or `rewrite-target` |
 | `VAR-PLAN-0007` | an annotation value is not a boolean, so varco treats it as unset |
+| `VAR-PLAN-0009` | annotations ignored by the generic profile, with the count for one Ingress |
 
 Cases are validated before they are emitted: a host, path or header value
 containing CR, LF or another control byte (or a path with a space or without a
 leading `/`) drops the case with a `VAR-PLAN-0003` finding instead of producing a
 malformed request.
 
+In the `nginx` profile, annotation handling below applies. The `generic` profile
+does not interpret annotation values; it reports their count once per Ingress
+with `VAR-PLAN-0009` and emits no annotation-specific findings.
 Annotations that are handled and therefore never reported: `use-regex`,
 `rewrite-target`, `ssl-redirect`, `force-ssl-redirect`, `enable-cors`,
 `cors-allow-headers`, `app-root`, `permanent-redirect`, `temporal-redirect`,
@@ -166,6 +196,8 @@ never planned and never guessed.
 
 ## Known limitations
 
+- The generic profile ignores controller annotations rather than translating
+  their behavior; use `nginx` when those annotations are under test.
 - `ssl-redirect` on a host without `spec.tls` plans an `http-redirect` case and cases that are still served with `scheme: http`, so some cases differ only by family and note.
 - When `--ingress-class` excludes an Ingress, that resource is dropped without a finding, and regex scope is computed over the included resources only, so an excluded `use-regex` Ingress changes the host scope silently.
 - Not-testable annotation classification is name-based and is not reclassified per annotation.

@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -39,11 +40,15 @@ func runPlan(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	kubeconfig := flags.String("kubeconfig", "", "kubeconfig file to use")
 	kubeTimeout := flags.Duration("kube-timeout", 30*time.Second, "timeout for one kubectl get")
 	controllerConfigmap := flags.String("controller-configmap", "ingress-nginx/ingress-nginx-controller", "controller ConfigMap as NAMESPACE/NAME (empty disables)")
+	profile := flags.String("profile", plan.ProfileNginx, "nginx or generic")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}
 		return 2
+	}
+	if !validProfile(*profile) {
+		return configFailure(stderr, "--profile must be nginx or generic")
 	}
 	if flags.NArg() != 0 {
 		return configFailure(stderr, "plan takes no positional arguments; pass manifests with -f")
@@ -78,12 +83,14 @@ func runPlan(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			return code
 		}
 	}
-	result := plan.Build(resources, plan.Options{IngressClass: *ingressClass, DefaultHost: *defaultHost, ControllerConfig: controllerConfig})
-	result.Warnings = append(result.Warnings, plan.ConfigMapWarnings(controllerConfig)...)
+	result := plan.Build(resources, plan.Options{IngressClass: *ingressClass, DefaultHost: *defaultHost, ControllerConfig: controllerConfig, Profile: *profile})
+	if *profile == plan.ProfileNginx {
+		result.Warnings = append(result.Warnings, plan.ConfigMapWarnings(controllerConfig)...)
+	}
 	sort.Slice(result.Warnings, func(i, j int) bool { return warningLess(result.Warnings[i], result.Warnings[j]) })
 	var err error
 	if *format == "json" {
-		err = report.PlanJSON(stdout, result)
+		err = writePlanJSON(stdout, result)
 	} else {
 		err = report.PlanTable(stdout, result)
 	}
@@ -148,6 +155,41 @@ func warningLess(a, b plan.Warning) bool {
 }
 
 // expandInputs turns -f values into a sorted, de-duplicated list of manifest
+
+func validProfile(value string) bool {
+	return value == plan.ProfileNginx || value == plan.ProfileGeneric
+}
+
+// writePlanJSON adds the additive top-level profile while preserving schema
+// version 1 and the stable field order of the plan envelope.
+func writePlanJSON(writer io.Writer, result plan.Plan) error {
+	document := struct {
+		SchemaVersion int            `json:"schema_version"`
+		Profile       string         `json:"profile"`
+		Cases         []plan.Case    `json:"cases"`
+		Unsupported   []plan.Finding `json:"unsupported"`
+		Warnings      []plan.Warning `json:"warnings"`
+	}{
+		SchemaVersion: 1,
+		Profile:       result.Profile,
+		Cases:         result.Cases,
+		Unsupported:   result.Unsupported,
+		Warnings:      result.Warnings,
+	}
+	if document.Cases == nil {
+		document.Cases = []plan.Case{}
+	}
+	if document.Unsupported == nil {
+		document.Unsupported = []plan.Finding{}
+	}
+	if document.Warnings == nil {
+		document.Warnings = []plan.Warning{}
+	}
+	encoder := json.NewEncoder(writer)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(document)
+}
+
 // files. Directories are walked recursively and only *.yaml, *.yml and *.json
 // regular files are collected, so the plan never depends on directory order.
 func expandInputs(inputs []string, stderr io.Writer) ([]string, int) {

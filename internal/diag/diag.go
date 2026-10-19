@@ -52,6 +52,8 @@ const (
 	// CodePlanConfigMap reports a controller ConfigMap setting that can change
 	// observable request or response behavior.
 	CodePlanConfigMap Code = "VAR-PLAN-0010"
+	// CodePlanAnnotationsIgnored reports annotations ignored by the generic profile.
+	CodePlanAnnotationsIgnored Code = "VAR-PLAN-0009"
 )
 
 // Severity is a diagnostic impact level.
@@ -150,6 +152,7 @@ func List() []Entry {
 		{Code: CodePlanAnnotationBool, Area: "PLAN", Title: "Annotation value is not a boolean", Severity: SeverityWarning, Description: "An annotation that ingress-nginx reads as a boolean does not parse as one, so varco treats it as unset.", Remediation: "Set the annotation to a boolean value such as true or false, or remove it."},
 		{Code: CodePlanNoPath, Area: "PLAN", Title: "No plannable HTTP path", Severity: SeverityWarning, Description: "An Ingress serves only spec.defaultBackend, or a rule has no HTTP path, so varco can plan no case for it.", Remediation: "Add an HTTP path with a backend, or probe the default backend manually."},
 		{Code: CodePlanConfigMap, Area: "PLAN", Title: "Controller ConfigMap setting", Severity: SeverityWarning, Description: "An ingress-nginx controller ConfigMap setting can change observable request or response behavior and is not encoded in an Ingress manifest.", Remediation: "Compare the value on both controllers and verify the behavior against the ingress-nginx ConfigMap documentation."},
+		{Code: CodePlanAnnotationsIgnored, Area: "PLAN", Title: "Annotations ignored by profile", Severity: SeverityWarning, Description: "The generic profile ignores controller annotations instead of interpreting their routing behavior.", Remediation: "Use the nginx profile when annotation-driven behavior is under test, or verify the annotations against the target controller."},
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Code < entries[j].Code })
 	return entries

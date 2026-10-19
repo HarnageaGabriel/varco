@@ -43,6 +43,7 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	kubeconfig := flags.String("kubeconfig", "", "kubeconfig file to use")
 	kubeTimeout := flags.Duration("kube-timeout", 30*time.Second, "timeout for one kubectl get")
 	controllerConfigmap := flags.String("controller-configmap", "ingress-nginx/ingress-nginx-controller", "controller ConfigMap as NAMESPACE/NAME (empty disables)")
+	profile := flags.String("profile", plan.ProfileNginx, "nginx or generic")
 	oldValue := flags.String("old", "", "old endpoint IP (port 80 for http, 443 for https)")
 	newValue := flags.String("new", "", "new endpoint IP (port 80 for http, 443 for https)")
 	oldHTTP := flags.String("old-http", "", "old endpoint for http cases (IP:port)")
@@ -70,6 +71,9 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			return 0
 		}
 		return 2
+	}
+	if !validProfile(*profile) {
+		return configFailure(stderr, "--profile must be nginx or generic")
 	}
 	if flags.NArg() != 0 {
 		return configFailure(stderr, "run takes no positional arguments")
@@ -127,9 +131,9 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	var manifest plan.Plan
 	var code int
 	if *fromCluster {
-		manifest, code = loadRunPlanFromCluster(*namespace, *kubeContext, *kubeconfig, *kubeTimeout, *controllerConfigmap, plan.Options{IngressClass: *ingressClass, DefaultHost: *defaultHost}, stderr)
+		manifest, code = loadRunPlanFromCluster(*namespace, *kubeContext, *kubeconfig, *kubeTimeout, *controllerConfigmap, plan.Options{IngressClass: *ingressClass, DefaultHost: *defaultHost, Profile: *profile}, stderr)
 	} else {
-		manifest, code = loadRunPlan(*planPath, inputs, stdin, plan.Options{IngressClass: *ingressClass, DefaultHost: *defaultHost}, stderr)
+		manifest, code = loadRunPlan(*planPath, inputs, stdin, plan.Options{IngressClass: *ingressClass, DefaultHost: *defaultHost, Profile: *profile}, stderr)
 	}
 	if code != 0 {
 		return code
@@ -217,7 +221,9 @@ func loadRunPlanFromClusterWithRunner(runner kube.Runner, namespace string, time
 		return plan.Plan{}, code
 	}
 	result := plan.Build(resources, options)
-	result.Warnings = append(result.Warnings, plan.ConfigMapWarnings(controllerConfig)...)
+	if options.Profile == plan.ProfileNginx {
+		result.Warnings = append(result.Warnings, plan.ConfigMapWarnings(controllerConfig)...)
+	}
 	sortWarnings(result.Warnings)
 	return result, 0
 }
@@ -258,14 +264,20 @@ func loadRunPlan(planPath string, inputs stringsFlag, stdin io.Reader, options p
 		if err != nil {
 			return plan.Plan{}, configFailure(stderr, fmt.Sprintf("cannot read plan: %v", err))
 		}
-		var document report.PlanDocument
+		var document struct {
+			SchemaVersion int            `json:"schema_version"`
+			Profile       string         `json:"profile"`
+			Cases         []plan.Case    `json:"cases"`
+			Unsupported   []plan.Finding `json:"unsupported"`
+			Warnings      []plan.Warning `json:"warnings"`
+		}
 		if err := json.Unmarshal(content, &document); err != nil {
 			return plan.Plan{}, configFailure(stderr, fmt.Sprintf("cannot parse plan JSON: %v", err))
 		}
 		if document.SchemaVersion != 1 {
 			return plan.Plan{}, configFailure(stderr, fmt.Sprintf("unsupported plan schema_version %d (want 1)", document.SchemaVersion))
 		}
-		return plan.Plan{Cases: document.Cases, Unsupported: document.Unsupported, Warnings: document.Warnings}, 0
+		return plan.Plan{Profile: document.Profile, Cases: document.Cases, Unsupported: document.Unsupported, Warnings: document.Warnings}, 0
 	}
 	paths, code := expandInputs(inputs, stderr)
 	if code != 0 {
