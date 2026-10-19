@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -12,10 +13,13 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/HarnageaGabriel/varco/internal/diag"
 	"github.com/HarnageaGabriel/varco/internal/ingress"
+	"github.com/HarnageaGabriel/varco/internal/kube"
 	"github.com/HarnageaGabriel/varco/internal/plan"
+	"github.com/HarnageaGabriel/varco/internal/redact"
 	"github.com/HarnageaGabriel/varco/internal/report"
 )
 
@@ -30,6 +34,12 @@ func runPlan(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	format := flags.String("format", "table", "table or json")
 	ingressClass := flags.String("ingress-class", "", "plan only Ingress resources of this class")
 	defaultHost := flags.String("default-host", "", "host for rules that declare none")
+	fromCluster := flags.Bool("from-cluster", false, "read Ingresses and the controller ConfigMap with kubectl get")
+	namespace := flags.String("namespace", "", "read Ingresses from this namespace (default all namespaces)")
+	kubeContext := flags.String("kube-context", "", "kubectl context to use")
+	kubeconfig := flags.String("kubeconfig", "", "kubeconfig file to use")
+	kubeTimeout := flags.Duration("kube-timeout", 30*time.Second, "timeout for one kubectl get")
+	controllerConfigmap := flags.String("controller-configmap", "ingress-nginx/ingress-nginx-controller", "controller ConfigMap as NAMESPACE/NAME (empty disables)")
 	profile := flags.String("profile", plan.ProfileNginx, "nginx or generic")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -43,21 +53,41 @@ func runPlan(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if flags.NArg() != 0 {
 		return configFailure(stderr, "plan takes no positional arguments; pass manifests with -f")
 	}
-	if len(inputs) == 0 {
-		return configFailure(stderr, "plan requires at least one -f <file|directory|->")
+	if *fromCluster && len(inputs) != 0 {
+		return configFailure(stderr, "use either --from-cluster or -f, not both")
+	}
+	if !*fromCluster && len(inputs) == 0 {
+		return configFailure(stderr, "plan requires at least one -f <file|directory|-> or --from-cluster")
 	}
 	if *format != "table" && *format != "json" {
 		return configFailure(stderr, "--format must be table or json")
 	}
-	paths, code := expandInputs(inputs, stderr)
-	if code != 0 {
-		return code
+	if *kubeTimeout <= 0 {
+		return configFailure(stderr, "--kube-timeout must be positive")
 	}
-	resources, code := parseInputs(paths, stdin, stderr)
-	if code != 0 {
-		return code
+	var resources []ingress.Ingress
+	var controllerConfig map[string]string
+	if *fromCluster {
+		loaded, configMap, code := loadClusterPlan(*namespace, *kubeContext, *kubeconfig, *kubeTimeout, *controllerConfigmap, stderr)
+		if code != 0 {
+			return code
+		}
+		resources, controllerConfig = loaded, configMap
+	} else {
+		paths, code := expandInputs(inputs, stderr)
+		if code != 0 {
+			return code
+		}
+		resources, code = parseInputs(paths, stdin, stderr)
+		if code != 0 {
+			return code
+		}
 	}
-	result := plan.Build(resources, plan.Options{IngressClass: *ingressClass, DefaultHost: *defaultHost, Profile: *profile})
+	result := plan.Build(resources, plan.Options{IngressClass: *ingressClass, DefaultHost: *defaultHost, ControllerConfig: controllerConfig, Profile: *profile})
+	if result.Profile == plan.ProfileNginx {
+		result.Warnings = append(result.Warnings, plan.ConfigMapWarnings(controllerConfig)...)
+	}
+	sort.Slice(result.Warnings, func(i, j int) bool { return warningLess(result.Warnings[i], result.Warnings[j]) })
 	var err error
 	if *format == "json" {
 		err = writePlanJSON(stdout, result)
@@ -69,6 +99,59 @@ func runPlan(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 4
 	}
 	return 0
+}
+
+// loadClusterPlan is the read-only cluster edge used by both plan and run.
+// It invokes only kubectl get and never writes to the cluster.
+func loadClusterPlan(namespace, contextName, kubeconfig string, timeout time.Duration, controllerRef string, stderr io.Writer) ([]ingress.Ingress, map[string]string, int) {
+	return loadClusterPlanWithRunner(kube.DefaultRunner{KubeConfig: kubeconfig, ContextName: contextName}, namespace, timeout, controllerRef, stderr)
+}
+
+func loadClusterPlanWithRunner(runner kube.Runner, namespace string, timeout time.Duration, controllerRef string, stderr io.Writer) ([]ingress.Ingress, map[string]string, int) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	ingressJSON, err := kube.FetchIngresses(ctx, runner, namespace)
+	if err != nil {
+		return nil, nil, kubeFailure(stderr, err)
+	}
+	resources, err := ingress.Parse(bytes.NewReader(ingressJSON))
+	if err != nil {
+		return nil, nil, configFailure(stderr, fmt.Sprintf("cannot parse cluster Ingress JSON: %v", err))
+	}
+	var controllerConfig map[string]string
+	if controllerRef != "" {
+		controllerNamespace, controllerName, ok := strings.Cut(controllerRef, "/")
+		if !ok || controllerNamespace == "" || controllerName == "" {
+			return nil, nil, configFailure(stderr, "--controller-configmap must use NAMESPACE/NAME")
+		}
+		controllerConfig, err = kube.FetchConfigMap(ctx, runner, controllerNamespace, controllerName)
+		if err != nil {
+			return nil, nil, kubeFailure(stderr, err)
+		}
+	}
+	return resources, controllerConfig, 0
+}
+
+func kubeFailure(stderr io.Writer, err error) int {
+	_, _ = fmt.Fprintln(stderr, "kube:", redact.Text(truncateError(err.Error(), 2<<10)))
+	return 2
+}
+
+func truncateError(value string, limit int) string {
+	if len(value) <= limit {
+		return value
+	}
+	return value[:limit]
+}
+
+func warningLess(a, b plan.Warning) bool {
+	if a.Code != b.Code {
+		return a.Code < b.Code
+	}
+	if a.Ingress != b.Ingress {
+		return a.Ingress < b.Ingress
+	}
+	return a.Message < b.Message
 }
 
 // expandInputs turns -f values into a sorted, de-duplicated list of manifest
