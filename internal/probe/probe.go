@@ -32,6 +32,7 @@ const (
 var (
 	errInvalidResponse     = errors.New("invalid HTTP response")
 	errInvalidResponseBody = errors.New("invalid HTTP response body")
+	errTooManyInterim      = errors.New("too many interim responses")
 )
 
 // Request configures one endpoint probe.
@@ -131,34 +132,46 @@ func Do(ctx context.Context, request Request) (result.Result, error) {
 	if _, err := io.WriteString(rw, buildRequest(method, request)); err != nil {
 		return result.Result{}, ioFailure(ctx, request.Endpoint.String(), "write request", err)
 	}
-	reader := bufio.NewReader(rw)
-	var response *http.Response
-	for interim := 0; ; {
-		header, err := readHeaderBlock(reader)
-		if err != nil {
-			return result.Result{}, ioFailure(ctx, request.Endpoint.String(), "read response", err)
-		}
-		parsed, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(header)), &http.Request{Method: method}) //nolint:bodyclose // body is never drained; the connection is closed by defer conn.Close.
-		if err != nil {
-			return result.Result{}, ioFailure(ctx, request.Endpoint.String(), "read response", errInvalidResponse)
-		}
-		if parsed.StatusCode < 100 || parsed.StatusCode >= 200 || parsed.StatusCode == http.StatusSwitchingProtocols {
-			response, err = http.ReadResponse(bufio.NewReader(io.MultiReader(bytes.NewReader(header), reader)), &http.Request{Method: method}) //nolint:bodyclose // body is consumed by capture; the connection is closed by defer conn.Close.
-			if err != nil {
-				return result.Result{}, ioFailure(ctx, request.Endpoint.String(), "read response", errInvalidResponse)
-			}
-			break
-		}
-		interim++
-		if interim > maxInterimResponses {
+	response, err := readResponse(rw, method) //nolint:bodyclose // body is consumed by capture; the connection is closed by defer conn.Close.
+	if err != nil {
+		if errors.Is(err, errTooManyInterim) {
 			return result.Result{}, fmt.Errorf("probe %s: too many interim responses", request.Endpoint.String())
 		}
+		return result.Result{}, ioFailure(ctx, request.Endpoint.String(), "read response", err)
 	}
 	captured, err := capture(response, state, maxBodyBytes)
 	if err != nil {
 		return result.Result{}, ioFailure(ctx, request.Endpoint.String(), "", err)
 	}
 	return captured, nil
+}
+
+func readResponse(source io.Reader, method string) (*http.Response, error) {
+	reader := bufio.NewReader(source)
+	for interim := 0; ; {
+		header, err := readHeaderBlock(reader)
+		if err != nil {
+			return nil, err
+		}
+		parsed, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(header)), &http.Request{Method: method}) //nolint:bodyclose // body is never drained; the caller owns the response.
+		if err != nil {
+			return nil, errInvalidResponse
+		}
+		if parsed.StatusCode < 100 || parsed.StatusCode > 599 {
+			return nil, errInvalidResponse
+		}
+		if parsed.StatusCode >= 200 || parsed.StatusCode == http.StatusSwitchingProtocols {
+			response, err := http.ReadResponse(bufio.NewReader(io.MultiReader(bytes.NewReader(header), reader)), &http.Request{Method: method}) //nolint:bodyclose // body is consumed by capture.
+			if err != nil {
+				return nil, errInvalidResponse
+			}
+			return response, nil
+		}
+		interim++
+		if interim > maxInterimResponses {
+			return nil, errTooManyInterim
+		}
+	}
 }
 
 func readHeaderBlock(reader *bufio.Reader) ([]byte, error) {
