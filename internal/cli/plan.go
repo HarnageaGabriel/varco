@@ -84,7 +84,7 @@ func runPlan(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 	}
 	result := plan.Build(resources, plan.Options{IngressClass: *ingressClass, DefaultHost: *defaultHost, ControllerConfig: controllerConfig, Profile: *profile})
-	if *profile == plan.ProfileNginx {
+	if result.Profile == plan.ProfileNginx {
 		result.Warnings = append(result.Warnings, plan.ConfigMapWarnings(controllerConfig)...)
 	}
 	sort.Slice(result.Warnings, func(i, j int) bool { return warningLess(result.Warnings[i], result.Warnings[j]) })

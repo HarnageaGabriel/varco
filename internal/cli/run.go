@@ -221,7 +221,7 @@ func loadRunPlanFromClusterWithRunner(runner kube.Runner, namespace string, time
 		return plan.Plan{}, code
 	}
 	result := plan.Build(resources, options)
-	if options.Profile == plan.ProfileNginx {
+	if result.Profile == plan.ProfileNginx {
 		result.Warnings = append(result.Warnings, plan.ConfigMapWarnings(controllerConfig)...)
 	}
 	sortWarnings(result.Warnings)
