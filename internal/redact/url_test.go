@@ -2,6 +2,7 @@ package redact
 
 import (
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -59,31 +60,60 @@ func FuzzURL(f *testing.F) {
 		allowed := *parsed
 		allowed.RawQuery = ""
 		allowed.ForceQuery = false
-		allowed.Fragment = ""
-		allowed.RawFragment = ""
 		if allowed.User != nil {
-			allowed.User = url.User("REDACTED")
+			allowed.User = url.User(replacement)
 		}
-		allowedOutput := allowed.String()
-		for _, part := range strings.Split(parsed.RawQuery, "&") {
-			key, value, ok := strings.Cut(part, "=")
-			if !ok {
-				value = ""
-			}
+		want, wantErr := url.Parse(allowed.String())
+		if wantErr != nil {
+			t.Fatalf("allowed URL %q does not parse: %v", allowed.String(), wantErr)
+		}
+		reparsed, parseErr := url.Parse(first)
+		if parseErr != nil {
+			t.Fatalf("redacted URL %q does not parse: %v", first, parseErr)
+		}
+		if reparsed.Scheme != want.Scheme ||
+			reparsed.Opaque != want.Opaque ||
+			reparsed.Host != want.Host ||
+			reparsed.Path != want.Path ||
+			!sameUserinfo(reparsed.User, want.User) {
+			t.Fatalf("redacted URL %q changed non-query parts: want %q", first, want.String())
+		}
+		for _, part := range strings.Split(reparsed.RawQuery, "&") {
+			key, value, _ := strings.Cut(part, "=")
 			decoded, decodeErr := url.QueryUnescape(value)
-			if decodeErr != nil || len(decoded) < 3 || decoded == "REDACTED" {
-				continue
+			if decodeErr != nil || (decoded != "" && decoded != replacement) {
+				t.Fatalf("redacted URL %q has unredacted query value %q for key %q", first, decoded, key)
 			}
-			// A value repeated in a deliberately retained component is not a
-			// query leak. Query keys are also retained by contract.
-			if strings.Contains(allowedOutput, decoded) || strings.Contains(key, decoded) {
-				continue
-			}
-			if strings.Contains(first, decoded) {
-				t.Fatalf("redacted URL %q contains query value %q", first, decoded)
-			}
+		}
+		inputKeys := queryKeys(parsed.RawQuery)
+		outputKeys := queryKeys(reparsed.RawQuery)
+		if !slices.Equal(inputKeys, outputKeys) {
+			t.Fatalf("redacted URL %q changed query keys: want %v, got %v", first, inputKeys, outputKeys)
+		}
+		wantFragment := ""
+		if parsed.Fragment != "" || parsed.RawFragment != "" {
+			wantFragment = replacement
+		}
+		if reparsed.Fragment != wantFragment || reparsed.RawFragment != "" {
+			t.Fatalf("redacted URL %q changed fragment: want %q, got %q", first, wantFragment, reparsed.Fragment)
 		}
 	})
+}
+
+func queryKeys(rawQuery string) []string {
+	parts := strings.Split(rawQuery, "&")
+	keys := make([]string, len(parts))
+	for i, part := range parts {
+		keys[i], _, _ = strings.Cut(part, "=")
+	}
+	return keys
+}
+
+func sameUserinfo(got, want *url.Userinfo) bool {
+	if got == nil || want == nil {
+		return got == want
+	}
+	return got.String() == want.String()
 }
 
 // Source: docs/adr/0006-redaction.md; probe and run diagnostics pass through

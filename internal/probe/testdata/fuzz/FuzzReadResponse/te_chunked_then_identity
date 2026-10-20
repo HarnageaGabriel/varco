@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nTransfer-Encoding: identity\r\n\r\n0\r\n\r\n")

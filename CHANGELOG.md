@@ -4,6 +4,7 @@ All notable changes are documented here. Format: [Keep a Changelog](https://keep
 
 ## [Unreleased]
 
+- Fix the `FuzzURL` oracle false positive: query values that also appear as the path or query separator no longer trip the leak detector, which now re-parses the redacted output and asserts its non-query parts, query keys, redacted fragment, and per-value `REDACTED` state instead of substring matching.
 - Add nightly race and fuzz checks, dependency review, third-party license
   notices, trademark and issue-contact policies, CODEOWNERS, and maintainer
   governance documentation.
