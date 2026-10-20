@@ -58,6 +58,7 @@ jobs:
           check_package internal/probe 85
           check_package internal/report 80
           check_package internal/model 90
+          check_package internal/kube 90
           check_package internal/policy 90
           check_package internal/explain 90
 
