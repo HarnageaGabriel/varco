@@ -23,7 +23,9 @@ defined in [SECURITY.md](../SECURITY.md).
 
 ## Releases
 
-Releases follow [docs/release-process.md](release-process.md).
+Releases follow [docs/release-process.md](release-process.md). The binaries of a
+release are reproducible; the check is `make verify-reproducible`, described in
+[Verify reproducibility](release-process.md#verify-reproducibility).
 
 ## Branch protection
 
