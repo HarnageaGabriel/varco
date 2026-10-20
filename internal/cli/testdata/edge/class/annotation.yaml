@@ -1,0 +1,14 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: class-annotation
+  namespace: edge
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  rules:
+    - host: class-annotation.example.com
+      http:
+        paths:
+          - path: /class-annotation
+            pathType: Prefix
