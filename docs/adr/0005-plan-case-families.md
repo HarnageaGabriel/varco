@@ -110,18 +110,41 @@ in a plan without guesswork:
 - `head` sends one `HEAD` request instead of `GET` on the same target (RFC 9110
   section 9.3.2). HEAD is one of the default safe methods.
 
-Both families are emitted for every concrete declared host on that host's first
-planned path, and both the `nginx` and the `generic` profiles emit them: host
-matching and HEAD handling are portable HTTP behaviors, not ingress-nginx
-annotations (ADR 0008). Hosts substituted from a wildcard label or filled in
-from `--default-host` are skipped - for those, a host-variant difference would
-probe varco's substitution instead of a declared host. SNI stays the plain host,
-so only the `Host` header differs on the wire. Like every family, these cases
-probe and assert nothing about which behavior is right: equivalence between old
-and new is what is compared.
+Both families are emitted for every concrete declared host on the smallest
+planned path of that host, and both the `nginx` and the `generic` profiles emit
+them: host matching and HEAD handling are portable HTTP behaviors, not
+ingress-nginx annotations (ADR 0008). Hosts substituted from a wildcard label or
+filled in from `--default-host` are skipped - for those, a host-variant
+difference would probe varco's substitution instead of a declared host. SNI stays
+the plain host, so only the `Host` header differs on the wire. Like every
+family, these cases probe and assert nothing about which behavior is right:
+equivalence between old and new is what is compared.
 
 On the probe side, the planner may carry exactly one `Host` header override per
 request, and the prober now accepts exactly one such override, validates it like
 a case host (rejecting an empty value, duplicate or multi-valued `Host` headers),
 and writes it as the request's only `Host` line. `varco diff --header` still
 forbids `Host`: setting it by hand remains reserved for planned cases.
+
+## Order independence of the plan output (appended 2026-10-20)
+
+The plan output does not depend on the order of the input resources: the same
+resources in any order produce the same plan, byte for byte. Two parts of the
+output span several resources and are therefore chosen by a stable rule:
+
+- the `head` and `host-variant` cases of a host use the smallest planned path
+  of that host - the lexicographically smallest request target planned for it,
+  in byte order, chosen once every resource has been read. They used to use the
+  first planned path, which depended on the order of the input;
+- the `VAR-PLAN-0006` warning names the Ingress with the smallest namespace and
+  name among those that turned host-wide regex matching on for the host. It
+  used to name the first one varco read.
+
+The rule is what makes the guarantee hold, and the plan keeps it: cases are
+sorted by a stable key, findings and warnings are sorted and de-duplicated,
+and no map iteration reaches the output.
+
+The id of a case is the hash of the case, so the head and host-variant cases of
+a host whose smallest planned path is not the path planned first get a new id.
+The ids of every other family are unchanged: only the path of those two
+families, and the note of the `head` case, moved.

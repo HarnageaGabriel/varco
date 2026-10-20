@@ -11,10 +11,10 @@ import (
 )
 
 // The head and host-variant families are plan-wide: one HEAD request and three
-// Host header variants per concrete host, on that host's first planned path.
-// Sources: docs/adr/0005-plan-case-families.md, RFC 3986 section 3.2.2 (the host
-// is case-insensitive), RFC 9110 section 7.2 (the Host header may carry the
-// port), and RFC 9110 section 9.3.2 (HEAD).
+// Host header variants per concrete host, on the smallest planned path of that
+// host. Sources: docs/adr/0005-plan-case-families.md, RFC 3986 section 3.2.2
+// (the host is case-insensitive), RFC 9110 section 7.2 (the Host header may
+// carry the port), and RFC 9110 section 9.3.2 (HEAD).
 
 // syntheticCase is the projection of one head or host-variant case the tests
 // compare: the family, the request shape and the Host header value, without the
@@ -92,11 +92,33 @@ func projectionsString(items []syntheticCase) string {
 	return fmt.Sprintf("%+v", items)
 }
 
+// TestBuildHeadAndHostVariantCasesDoNotDependOnInputOrder proves that the
+// head and host-variant cases of a host are the same in every input order.
+//
+// Sources: docs/plan.md ("Determinism guarantees") and ADR 0005 ("Determinism
+// is part of the contract"). The head and host-variant cases use the smallest
+// planned path of the host (internal/plan/generate.go, builder.plannedPaths),
+// so they do not depend on which resource is read first.
+func TestBuildHeadAndHostVariantCasesDoNotDependOnInputOrder(t *testing.T) {
+	small := pathIngress("small", "c.example.com", "/a", "Prefix", nil)
+	large := pathIngress("large", "c.example.com", "/b", "Prefix", nil)
+	forward := Build([]ingress.Ingress{small, large}, Options{})
+	reversed := Build([]ingress.Ingress{large, small}, Options{})
+	if !reflect.DeepEqual(forward.Cases, reversed.Cases) {
+		t.Fatalf("the planned cases changed with the input order:\nforward: %#v\nreversed: %#v", forward.Cases, reversed.Cases)
+	}
+}
+
+// TestBuildHeadAndHostVariantCases covers the head and host-variant families.
 func TestBuildHeadAndHostVariantCases(t *testing.T) {
 	tlsHost := pathIngress("api", "api.example.com", "/api", "Prefix", nil)
 	tlsHost.TLS = []ingress.TLS{{Hosts: []string{"api.example.com"}}}
 	firstRule := pathIngress("a", "a.example.com", "/a", "Prefix", nil)
 	secondRule := pathIngress("b", "a.example.com", "/b", "Prefix", nil)
+	// The same host declared by two resources, the one with the smaller path
+	// planned last: the smallest planned path wins, not the first one.
+	smallPath := pathIngress("small", "c.example.com", "/a", "Prefix", nil)
+	largePath := pathIngress("large", "c.example.com", "/b", "Prefix", nil)
 	hostless := ingress.Ingress{
 		APIVersion: ingress.APIVersion,
 		Kind:       ingress.KindIngress,
@@ -148,13 +170,33 @@ func TestBuildHeadAndHostVariantCases(t *testing.T) {
 			},
 		},
 		{
-			name:      "the variants send the host's first planned path",
+			name:      "the variants send the smallest planned path of the host",
 			resources: []ingress.Ingress{firstRule, secondRule},
 			want: []syntheticCase{
 				{Family: FamilyHostVariant, Host: "a.example.com", Scheme: SchemeHTTP, Method: MethodGet, Path: "/a", HostHeader: "A.EXAMPLE.COM"},
 				{Family: FamilyHostVariant, Host: "a.example.com", Scheme: SchemeHTTP, Method: MethodGet, Path: "/a", HostHeader: "a.example.com."},
 				{Family: FamilyHostVariant, Host: "a.example.com", Scheme: SchemeHTTP, Method: MethodGet, Path: "/a", HostHeader: "a.example.com:80"},
 				{Family: FamilyHead, Host: "a.example.com", Scheme: SchemeHTTP, Method: MethodHead, Path: "/a"},
+			},
+		},
+		{
+			name:      "the smallest planned path wins over the first planned one",
+			resources: []ingress.Ingress{largePath, smallPath},
+			want: []syntheticCase{
+				{Family: FamilyHostVariant, Host: "c.example.com", Scheme: SchemeHTTP, Method: MethodGet, Path: "/a", HostHeader: "C.EXAMPLE.COM"},
+				{Family: FamilyHostVariant, Host: "c.example.com", Scheme: SchemeHTTP, Method: MethodGet, Path: "/a", HostHeader: "c.example.com."},
+				{Family: FamilyHostVariant, Host: "c.example.com", Scheme: SchemeHTTP, Method: MethodGet, Path: "/a", HostHeader: "c.example.com:80"},
+				{Family: FamilyHead, Host: "c.example.com", Scheme: SchemeHTTP, Method: MethodHead, Path: "/a"},
+			},
+		},
+		{
+			name:      "the smallest planned path wins in either input order",
+			resources: []ingress.Ingress{smallPath, largePath},
+			want: []syntheticCase{
+				{Family: FamilyHostVariant, Host: "c.example.com", Scheme: SchemeHTTP, Method: MethodGet, Path: "/a", HostHeader: "C.EXAMPLE.COM"},
+				{Family: FamilyHostVariant, Host: "c.example.com", Scheme: SchemeHTTP, Method: MethodGet, Path: "/a", HostHeader: "c.example.com."},
+				{Family: FamilyHostVariant, Host: "c.example.com", Scheme: SchemeHTTP, Method: MethodGet, Path: "/a", HostHeader: "c.example.com:80"},
+				{Family: FamilyHead, Host: "c.example.com", Scheme: SchemeHTTP, Method: MethodHead, Path: "/a"},
 			},
 		},
 		{

@@ -70,8 +70,9 @@ const (
 	// FamilyHostVariant sends the same path with a modified Host header, so a
 	// difference in host matching between the two controllers becomes visible.
 	FamilyHostVariant = "host-variant"
-	// FamilyHead sends a HEAD request on the first planned path, so a
-	// difference in HEAD handling between the two controllers becomes visible.
+	// FamilyHead sends a HEAD request on the smallest planned path of the
+	// host, so a difference in HEAD handling between the two controllers
+	// becomes visible.
 	FamilyHead = "head"
 )
 
@@ -107,9 +108,16 @@ type builder struct {
 	plan       Plan
 	included   []ingress.Ingress
 	hosts      [][]resolvedRule
-	regexHosts map[string]string
-	tlsHosts   map[string]bool
-	firstPaths map[string]string
+	regexHosts map[string]bool
+	// regexSources holds, per host matched as a regex, the Ingress that
+	// turned the host-wide scope on.
+	regexSources map[string]regexSource
+	tlsHosts     map[string]bool
+	// plannedPaths holds, per host, the request targets planned for it. The
+	// head and host-variant families use the smallest of them, chosen once
+	// every resource is processed, so the plan does not depend on the order
+	// of the input.
+	plannedPaths map[string][]string
 }
 
 // resolvedRule is the effective host of one rule, resolved once.
@@ -140,6 +148,9 @@ type profileBehavior interface {
 	preparePath(resource ingress.Ingress, path ingress.Path, hostRegex bool, builder *builder) preparedPath
 	addAppRoot(index int, resource ingress.Ingress, builder *builder)
 	httpRedirect(resource ingress.Ingress, tlsHost bool, builder *builder) redirectPlan
+	// addPlanWarnings appends the warnings that need the whole plan, so they
+	// are added once every resource has been processed.
+	addPlanWarnings(builder *builder)
 }
 
 type preparedPath struct {
@@ -204,6 +215,8 @@ func (genericProfile) preparePath(_ ingress.Ingress, path ingress.Path, _ bool, 
 
 func (genericProfile) addAppRoot(int, ingress.Ingress, *builder) {}
 
+func (genericProfile) addPlanWarnings(*builder) {}
+
 func (genericProfile) httpRedirect(_ ingress.Ingress, tlsHost bool, _ *builder) redirectPlan {
 	return redirectPlan{
 		enabled: tlsHost,
@@ -222,12 +235,13 @@ func newBuilder(options Options) *builder {
 		options.Profile = ProfileNginx
 	}
 	return &builder{
-		options:    options,
-		profile:    profile,
-		plan:       Plan{Profile: planProfile},
-		regexHosts: map[string]string{},
-		tlsHosts:   map[string]bool{},
-		firstPaths: map[string]string{},
+		options:      options,
+		profile:      profile,
+		plan:         Plan{Profile: planProfile},
+		regexHosts:   map[string]bool{},
+		regexSources: map[string]regexSource{},
+		tlsHosts:     map[string]bool{},
+		plannedPaths: map[string][]string{},
 	}
 }
 
@@ -245,6 +259,9 @@ func (b *builder) run(resources []ingress.Ingress) {
 	for index, resource := range included {
 		b.resolveHosts(index, resource)
 	}
+	// The warnings that name a host are added once every host is resolved,
+	// so they do not depend on the order of the input.
+	b.profile.addPlanWarnings(b)
 	for index, resource := range included {
 		b.addResource(index, resource)
 	}
@@ -256,8 +273,8 @@ func (b *builder) run(resources []ingress.Ingress) {
 // a whole rather than from one Ingress and carried by the synthetic source:
 // a default-backend probe per scheme the plan uses, one unmatched-route probe
 // per host that declares no Prefix or ImplementationSpecific "/" path, and one
-// head plus host-variant group per concrete host on that host's first planned
-// path.
+// head plus host-variant group per concrete host on the smallest planned path
+// of that host.
 func (b *builder) addSyntheticCases() {
 	schemes := make(map[string]bool, 2)
 	for _, item := range b.plan.Cases {
@@ -336,16 +353,19 @@ func (b *builder) addSyntheticCases() {
 }
 
 // addHostVariantAndHeadCases appends the host-variant and head cases for every
-// concrete host on that host's first planned path. Hosts substituted from a
-// wildcard label or filled in from --default-host are skipped: comparing host
-// handling for them would probe varco's substitution instead of the declared
-// host. same-path cases carry the synthetic source.
+// concrete host on the smallest planned path of that host. The path is the
+// lexicographically smallest request target planned for the host, chosen after
+// every resource is processed, so the plan does not depend on the order of the
+// input. Hosts substituted from a wildcard label or filled in from
+// --default-host are skipped: comparing host handling for them would probe
+// varco's substitution instead of the declared host. same-path cases carry the
+// synthetic source.
 func (b *builder) addHostVariantAndHeadCases(hostOrder []string, concrete map[string]bool) {
 	for _, host := range hostOrder {
 		if !concrete[host] {
 			continue
 		}
-		path := b.firstPaths[host]
+		path := smallestPath(b.plannedPaths[host])
 		if path == "" {
 			continue
 		}
@@ -365,7 +385,7 @@ func (b *builder) addHostVariantAndHeadCases(hostOrder []string, concrete map[st
 			Path:   path,
 			Family: FamilyHead,
 			Source: Source{Ingress: syntheticIngress},
-			Note:   "HEAD on the first planned path; the comparison shows only whether old and new handle HEAD equivalently (RFC 9110 section 9.3.2)",
+			Note:   "HEAD on the smallest planned path of the host; the comparison shows only whether old and new handle HEAD equivalently (RFC 9110 section 9.3.2)",
 		})
 		for _, variant := range []struct {
 			value string
@@ -388,6 +408,18 @@ func (b *builder) addHostVariantAndHeadCases(hostOrder []string, concrete map[st
 			})
 		}
 	}
+}
+
+// smallestPath returns the lexicographically smallest path of a host in byte
+// order, or "" when the host has no planned path.
+func smallestPath(paths []string) string {
+	smallest := ""
+	for _, path := range paths {
+		if smallest == "" || path < smallest {
+			smallest = path
+		}
+	}
+	return smallest
 }
 
 // isCatchAllPath reports whether a path matches every request on its host: a
@@ -479,7 +511,7 @@ func (b *builder) addResource(index int, resource ingress.Ingress) {
 
 // addPath emits the cases for one rule host and one HTTP path.
 func (b *builder) addPath(resource ingress.Ingress, host string, path ingress.Path, source Source) {
-	_, hostRegex := b.regexHosts[host]
+	hostRegex := b.regexHosts[host]
 	prepared := b.profile.preparePath(resource, path, hostRegex, b)
 	if prepared.skip {
 		return
@@ -535,19 +567,14 @@ func (b *builder) emit(resource ingress.Ingress, host string, source Source, req
 	if tls {
 		scheme, sni = SchemeHTTPS, host
 	}
-	// The first planned request target decides which path the head and
-	// host-variant cases send for this host.
-	if len(requests) > 0 && b.firstPaths[host] == "" {
-		b.firstPaths[host] = requests[0].path
-	}
 	redirect := b.profile.httpRedirect(resource, tls, b)
 	if redirect.sharedNote != "" {
 		shared = joinNotes(shared, redirect.sharedNote)
 	}
-	for _, item := range requests {
+	for index, item := range requests {
 		caseSource := source
 		caseSource.Annotation = item.annotation
-		b.appendCase(Case{
+		planned := b.appendCase(Case{
 			Host:    host,
 			SNI:     sni,
 			Scheme:  scheme,
@@ -558,6 +585,12 @@ func (b *builder) emit(resource ingress.Ingress, host string, source Source, req
 			Source:  caseSource,
 			Note:    joinNotes(item.note, shared),
 		})
+		if index == 0 && planned {
+			// The planned request target is a candidate for the head and
+			// host-variant cases of this host; the smallest one is chosen
+			// once every resource has been processed.
+			b.plannedPaths[host] = append(b.plannedPaths[host], item.path)
+		}
 	}
 	if !redirect.enabled {
 		return
@@ -583,9 +616,10 @@ func (b *builder) emit(resource ingress.Ingress, host string, source Source, req
 }
 
 // appendCase validates a planned case and appends it, or records why varco drops
-// it. Validation lives in this pure package so a manifest value can never become
-// a malformed request in a later run.
-func (b *builder) appendCase(item Case) {
+// it. It reports whether the case was appended. Validation lives in this pure
+// package so a manifest value can never become a malformed request in a later
+// run.
+func (b *builder) appendCase(item Case) bool {
 	if reason := validateCase(item); reason != "" {
 		b.addFinding(Finding{
 			Code:    diag.CodePlanManifest,
@@ -593,9 +627,10 @@ func (b *builder) appendCase(item Case) {
 			Path:    item.Path,
 			Message: fmt.Sprintf("%s; varco drops this case", reason),
 		})
-		return
+		return false
 	}
 	b.plan.Cases = append(b.plan.Cases, item)
+	return true
 }
 
 // validateCase reports why a case is not a valid HTTP request, or "".
