@@ -28,10 +28,10 @@ fmt:
 	gofumpt -w cmd internal tools
 
 docs:
-	go run ./tools/docsgen -out docs/diagnostics
+	go run ./tools/docsgen -out docs/diagnostics -reference-out docs/reference
 
 docs-check:
-	go run ./tools/docsgen -out docs/diagnostics -check
+	go run ./tools/docsgen -out docs/diagnostics -reference-out docs/reference -check
 
 release-check:
 	@if command -v goreleaser >/dev/null 2>&1; then \

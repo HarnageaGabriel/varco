@@ -20,8 +20,9 @@ const stalePageName = "VAR-STALE-9999.md"
 // helperEnv marks the child process that runs main() so the parent can
 // observe the exit code of the command.
 const (
-	helperEnv    = "VARCO_DOCSGEN_HELPER"
-	helperOutEnv = "VARCO_DOCSGEN_HELPER_OUT"
+	helperEnv          = "VARCO_DOCSGEN_HELPER"
+	helperOutEnv       = "VARCO_DOCSGEN_HELPER_OUT"
+	helperReferenceEnv = "VARCO_DOCSGEN_HELPER_REFERENCE"
 )
 
 // Source: tools/docsgen/main.go write; a page that is no longer generated is
@@ -159,8 +160,9 @@ func TestVerifyReportsUnusablePagePattern(t *testing.T) {
 // per process. The failure path of main runs in a child process instead.
 func TestMainWritesGeneratedPages(t *testing.T) {
 	directory := t.TempDir()
+	reference := t.TempDir()
 	original := os.Args
-	os.Args = []string{"docsgen", "-out", directory}
+	os.Args = []string{"docsgen", "-out", directory, "-reference-out", reference}
 	defer func() { os.Args = original }()
 	main()
 	pages, err := filepath.Glob(filepath.Join(directory, "*.md"))
@@ -177,6 +179,13 @@ func TestMainWritesGeneratedPages(t *testing.T) {
 	if !strings.Contains(string(index), string(diag.CodeInvalidFlag)) {
 		t.Fatalf("index = %q, want the diagnostic codes", index)
 	}
+	referencePages, err := filepath.Glob(filepath.Join(reference, "*.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(referencePages) == 0 {
+		t.Fatal("docsgen wrote no reference pages")
+	}
 }
 
 // Source: tools/docsgen/main.go main; a run that cannot write its pages
@@ -186,7 +195,7 @@ func TestMainReportsFailure(t *testing.T) {
 	if os.Getenv(helperEnv) == "" {
 		t.Skip("helper process; the parent test drives it")
 	}
-	os.Args = []string{"docsgen", "-out", os.Getenv(helperOutEnv)}
+	os.Args = []string{"docsgen", "-out", os.Getenv(helperOutEnv), "-reference-out", os.Getenv(helperReferenceEnv)}
 	main()
 }
 
@@ -201,7 +210,7 @@ func TestMainExitsWithFailure(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	command := exec.CommandContext(ctx, os.Args[0], "-test.run=TestMainReportsFailure")
-	command.Env = append(os.Environ(), helperEnv+"=1", helperOutEnv+"="+filepath.Join(blocker, "docs"))
+	command.Env = append(os.Environ(), helperEnv+"=1", helperOutEnv+"="+filepath.Join(blocker, "docs"), helperReferenceEnv+"="+filepath.Join(t.TempDir(), "reference"))
 	output, err := command.CombinedOutput()
 	var exitError *exec.ExitError
 	if !errors.As(err, &exitError) {
