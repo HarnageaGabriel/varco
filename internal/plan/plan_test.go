@@ -222,6 +222,42 @@ func TestBuildHostWideRegex(t *testing.T) {
 	}
 }
 
+// TestBuildHostWideRegexNamesTheSmallestIngress proves that the VAR-PLAN-0006
+// warning names the Ingress with the smallest namespace and name among those
+// that turned the host-wide regex scope on, whatever the order of the input.
+//
+// Sources: docs/plan.md ("records a VAR-PLAN-0006 warning naming the host")
+// and ADR 0005 ("the scope is surfaced as a VAR-PLAN-0006 warning"). The rule
+// is implemented in internal/plan/nginx.go, markRegexHost and
+// addRegexHostWarnings.
+func TestBuildHostWideRegexNamesTheSmallestIngress(t *testing.T) {
+	regex := map[string]string{annotationUseRegex: "true"}
+	beta := pathIngress("beta", "api.example.com", "/b", "Prefix", regex)
+	beta.Namespace = "prod"
+	alpha := pathIngress("alpha", "api.example.com", "/a", "Prefix", regex)
+	alpha.Namespace = "prod"
+	// Another namespace sorts after "prod", so "prod/alpha" is the smallest
+	// identity of the three.
+	other := pathIngress("alpha", "api.example.com", "/c", "Prefix", regex)
+	other.Namespace = "zzz"
+
+	want := []Warning{{
+		Code:    diag.CodePlanRegexHostWide,
+		Ingress: "prod/alpha",
+		Message: "use-regex or rewrite-target on prod/alpha makes ingress-nginx match every path of host api.example.com as a case-insensitive regex",
+	}}
+	for _, order := range [][]ingress.Ingress{
+		{beta, alpha, other},
+		{other, alpha, beta},
+		{alpha, other, beta},
+	} {
+		result := Build(order, Options{})
+		if !reflect.DeepEqual(result.Warnings, want) {
+			t.Fatalf("warnings = %#v, want %#v", result.Warnings, want)
+		}
+	}
+}
+
 func TestBuildNoCaseFlipWithoutRegex(t *testing.T) {
 	result := Build([]ingress.Ingress{pathIngress("plain", "plain.example.com", "/header", "Exact", nil)}, Options{})
 	for _, item := range result.Cases {

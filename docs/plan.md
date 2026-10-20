@@ -105,8 +105,8 @@ Each family isolates one behavior so a difference can be attributed to it.
 | `redirect-annotation` | `GET path` | `permanent-redirect` and `temporal-redirect` answer with a redirect; the expected code comes from `permanent-redirect-code`/`temporal-redirect-code` (default 301/302) and is recorded in the note |
 | `default-backend` | `GET /` on `varco-unknown.invalid` | an unknown host exercises the default backend and, over HTTPS, the default certificate |
 | `unmatched-route` | `GET /varco-unmatched-route` | a path no rule declares, on a host with no `Prefix`/`ImplementationSpecific` `/` route, must fall to whatever the controller serves for an unmatched path |
-| `host-variant` | the host's first planned path with the `Host` header upper-cased, written with a trailing dot (`example.com.`) or with the explicit default port for the scheme (`example.com:443` over https, `example.com:80` over http) | the host is case-insensitive (RFC 3986 section 3.2.2) and the `Host` header may carry the port (RFC 9110 section 7.2); SNI stays the plain host, so only the `Host` header differs, and the case asserts nothing about which behavior is right - equivalence between old and new is what is compared |
-| `head` | `HEAD` on the host's first planned path | HEAD handling (RFC 9110 section 9.3.2) must be equivalent between old and new; the case probes and asserts nothing |
+| `host-variant` | the host's smallest planned path with the `Host` header upper-cased, written with a trailing dot (`example.com.`) or with the explicit default port for the scheme (`example.com:443` over https, `example.com:80` over http) | the host is case-insensitive (RFC 3986 section 3.2.2) and the `Host` header may carry the port (RFC 9110 section 7.2); SNI stays the plain host, so only the `Host` header differs, and the case asserts nothing about which behavior is right - equivalence between old and new is what is compared |
+| `head` | `HEAD` on the host's smallest planned path | HEAD handling (RFC 9110 section 9.3.2) must be equivalent between old and new; the case probes and asserts nothing |
 
 Two families are synthetic: they are emitted once per plan, not from a declared
 route. A `default-backend` case is added for every scheme the plan uses (host
@@ -119,10 +119,13 @@ run can see what a controller does before any route matches - an unknown host
 Two more families come from the plan as a whole rather than from a single
 declared route: `head` and `host-variant`. Every concrete declared host (a
 wildcard host or a host filled in by `--default-host` is skipped) gets one `head`
-case and three `host-variant` cases on that host's first planned path. Both the
-`nginx` and the `generic` profile emit them, because host matching and HEAD
-handling are portable HTTP behaviors (ADR 0008). SNI stays the plain host, so
-only the `Host` header differs.
+case and three `host-variant` cases on the smallest planned path of that host:
+the lexicographically smallest request target planned for the host, in byte
+order, chosen after every resource has been read. The rule does not depend on
+the order of the input, so the same resources in any order plan the same
+cases. Both the `nginx` and the `generic` profile emit them, because host
+matching and HEAD handling are portable HTTP behaviors (ADR 0008). SNI stays
+the plain host, so only the `Host` header differs.
 
 Rule host and path type decide what is emitted: `Exact` paths get `base`,
 `trailing-slash` (unless regex), `case-flip` (when matching is case-insensitive),
@@ -143,7 +146,10 @@ guessed.
 `use-regex` on any Ingress, or a `rewrite-target` anywhere on the host, turns on
 host-wide regex matching. Planning then adds a `case-flip` case for every
 `Exact` and `Prefix` path of that host, including paths declared by other
-Ingress resources, and records a `VAR-PLAN-0006` warning naming the host.
+Ingress resources, and records a `VAR-PLAN-0006` warning naming the host and
+the Ingress that turned the scope on. When several Ingresses turn it on, the
+warning names the one with the smallest namespace and name, so it does not
+depend on the order of the input.
 Annotation booleans (`use-regex`, `ssl-redirect`, `force-ssl-redirect`,
 `enable-cors`) are parsed with `strconv.ParseBool`; an unparsable value is
 treated as unset and records a `VAR-PLAN-0007` warning.
@@ -207,6 +213,12 @@ never planned and never guessed.
 
 - Same input, same output: cases are sorted by a stable key, findings and
   warnings are sorted and de-duplicated, and no map iteration reaches the output.
+- The output does not depend on the order of the input resources: the same
+  resources in any order produce the same plan, byte for byte. The two parts
+  that span several resources are chosen by a stable rule: the `head` and
+  `host-variant` cases use the smallest planned path of their host, and the
+  `VAR-PLAN-0006` warning names the Ingress with the smallest namespace and
+  name among those that turned host-wide regex matching on.
 - No I/O and no clock inside `internal/ingress` and `internal/plan`; the CLI is
   the only place that reads files.
 - Unsupported work is always listed, never silently dropped.
