@@ -52,3 +52,16 @@ not include rejected header text.
 - Secrets carried in path segments (for example `/reset/<token>`) are not redacted: the path is what varco compares and reports.
 - Query keys are kept as written, so a secret used as a bare key (`/cb?<token>`) is printed. Use `--show-sensitive` only for local debugging.
 - A URL inside a diagnostic message is only redacted when it starts with `http://` or `https://`; another scheme (`ssh://`, `ftp://`) keeps its credentials.
+
+## Terminal output
+
+A remote server chooses the bytes of the values varco reports: a compared
+header, a `Location`, a certificate subject, a cookie name or a probe error
+can carry ANSI escape sequences, carriage returns or other control bytes. The
+run report and the diff report therefore escape every control character and
+every invalid UTF-8 byte of a reported value as a visible `\xNN` escape before
+the value reaches the table writer, so a hostile or compromised backend cannot
+repaint the operator's terminal or rewrite a line of the report. Printable
+text is unchanged, so ordinary reports keep their exact bytes. The JSON
+report is not rewritten: `encoding/json` escapes control characters on its
+own, and the JSON contract stays version 1.
