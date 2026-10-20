@@ -56,3 +56,20 @@ case.
 - Reports must retain accepted differences and incomplete cases.
 - `varco diff` adopts this precedence in M3; today exit code 3 still takes
   precedence over exit code 1.
+
+## Update 2026-10-20
+
+The precedence this ADR decides is implemented for `varco diff` and for
+`varco run`: exit code 1 (`DIFFERENT`) wins over exit code 3
+(`INCONCLUSIVE`) when a comparison has both a proven difference and a case
+that could not be observed.
+
+- `varco diff` returns 1 as soon as one path differs and returns 3 only when
+  no path differs and at least one probe failed (`internal/cli/cli.go`,
+  `runDiff`).
+- `varco run` returns the exit code of the aggregate verdict: 1 for
+  `DIFFERENT`, 3 for `INCONCLUSIVE` (`internal/cli/run.go`, `runRun`).
+
+The text above is left as it was written: the last bullet of Consequences
+described the state of the code when the ADR was accepted, not a decision
+that differs from it.

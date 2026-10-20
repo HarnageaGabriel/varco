@@ -56,9 +56,11 @@ package it works in.
 |---|---|
 | [CONVENTIONS.md](../../CONVENTIONS.md) | safety, determinism, layering, diagnostics, output, tests and the review protocol. Mandatory for every contributor. |
 | [CONTRIBUTING.md](../../CONTRIBUTING.md) | the DCO sign-off and the development workflow. |
+| [docs/architecture.md](../architecture.md) | the map of the code: which package decides what, and which file to change for a given task. |
 | [docs/adr/](../adr) | the architecture decisions. Each guide names the ADR to read. |
 | [docs/plan.md](../plan.md) | the case families and what each one probes. |
 | [docs/run.md](../run.md) | the run report, the verdict model and the explanation rules. |
+| [docs/reference/README.md](../reference/README.md) | the command reference generated from the real `varco` help: the flags of every command. |
 | [docs/schema/README.md](../schema/README.md) | the published JSON schemas and the compatibility promise. |
 | [docs/maintainers.md](../maintainers.md) | the required checks and the maintainer workflow. |
 
