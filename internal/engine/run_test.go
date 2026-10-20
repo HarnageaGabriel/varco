@@ -3,8 +3,10 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -316,6 +318,84 @@ func TestRunProgress(t *testing.T) {
 	}
 	if len(done) != 1 || done[0] != 1 {
 		t.Fatalf("progress = %v", done)
+	}
+}
+
+// Source: review finding F2; the progress callback is called by several
+// worker goroutines, so it must never be entered twice at the same time and
+// the reported count must stay monotone. The callback writes to an
+// unsynchronized slice on purpose: it is only safe because the engine
+// serializes the calls.
+func TestRunProgressIsSerialized(t *testing.T) {
+	const (
+		caseCount   = 8
+		concurrency = 4
+		window      = 20 * time.Millisecond
+	)
+	plan := make([]model.ProbeCase, caseCount)
+	for i := range plan {
+		plan[i] = model.ProbeCase{ID: fmt.Sprintf("c%d", i), Host: "h.example", Scheme: "http", Method: "GET", Path: fmt.Sprintf("/%d", i), Family: "base"}
+	}
+	// The first workers wait for each other, so they reach the progress
+	// callback at the same time and an unsynchronized callback would overlap.
+	release := make(chan struct{})
+	var started atomic.Int32
+	probeFn := func(context.Context, probe.Request) (result.Result, error) {
+		if started.Add(1) == concurrency {
+			close(release)
+		}
+		<-release
+		return result.Result{StatusCode: 200, Headers: []result.Header{{Name: "Content-Type", Values: []string{"text/plain"}}}}, nil
+	}
+	config := RunConfig{
+		Cases:       plan,
+		Old:         Endpoints{HTTP: mustEndpoint(t, "10.0.0.1", 80)},
+		New:         Endpoints{HTTP: mustEndpoint(t, "10.0.0.2", 80)},
+		Rate:        10000,
+		Concurrency: concurrency,
+		Now:         runNow,
+	}
+	var (
+		inFlight   atomic.Int32
+		concurrent atomic.Bool
+		reported   []int
+	)
+	config.Progress = func(completed, total int, _ model.ProbeCase, _ model.Outcome) {
+		if inFlight.Add(1) > 1 {
+			concurrent.Store(true)
+		}
+		defer inFlight.Add(-1)
+		if total != caseCount {
+			t.Errorf("total = %d, want %d", total, caseCount)
+		}
+		// Wait for a second callback to appear: without the engine lock the
+		// overlapping workers are observed within this window.
+		deadline := time.After(window)
+		for inFlight.Load() < 2 {
+			select {
+			case <-deadline:
+				reported = append(reported, completed)
+				return
+			default:
+				runtime.Gosched()
+			}
+		}
+		concurrent.Store(true)
+		reported = append(reported, completed)
+	}
+	if _, err := Run(context.Background(), config, fakeClock{ticksOf(256)}, probeFn); err != nil {
+		t.Fatal(err)
+	}
+	if concurrent.Load() {
+		t.Fatal("the progress callback ran concurrently")
+	}
+	if len(reported) != caseCount {
+		t.Fatalf("progress calls = %d, want %d", len(reported), caseCount)
+	}
+	for i, completed := range reported {
+		if completed != i+1 {
+			t.Fatalf("progress = %v, want 1..%d", reported, caseCount)
+		}
 	}
 }
 
