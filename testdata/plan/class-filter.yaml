@@ -1,0 +1,103 @@
+# Input for the class filter: Ingress resources of three classes, so a plan
+# with --ingress-class nginx reports the Ingresses it left out (VAR-PLAN-0011).
+# Source: https://kubernetes.io/blog/2026/02/27/ingress-nginx-before-you-migrate
+# (a controller serves the Ingresses of its own class; see docs/plan.md,
+# "Known limitations", and docs/adr/0005-plan-case-families.md).
+# Anonymized: one shop with two routes of the nginx class, one of another
+# class, one that declares its class in the legacy annotation and one that
+# declares no class at all.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: shop
+  name: checkout
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: class-checkout.example.com
+      http:
+        paths:
+          - path: /checkout
+            pathType: Prefix
+            backend:
+              service:
+                name: checkout
+                port:
+                  number: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: shop
+  name: legacy
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  rules:
+    - host: class-legacy.example.com
+      http:
+        paths:
+          - path: /legacy
+            pathType: Prefix
+            backend:
+              service:
+                name: legacy
+                port:
+                  number: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: shop
+  name: catalog
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: class-catalog.example.com
+      http:
+        paths:
+          - path: /catalog
+            pathType: Prefix
+            backend:
+              service:
+                name: catalog
+                port:
+                  number: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: shop
+  name: search
+  annotations:
+    kubernetes.io/ingress.class: traefik
+spec:
+  rules:
+    - host: class-search.example.com
+      http:
+        paths:
+          - path: /search
+            pathType: Prefix
+            backend:
+              service:
+                name: search
+                port:
+                  number: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: shop
+  name: classless
+spec:
+  rules:
+    - host: class-classless.example.com
+      http:
+        paths:
+          - path: /classless
+            pathType: Prefix
+            backend:
+              service:
+                name: classless
+                port:
+                  number: 8080

@@ -29,6 +29,7 @@ func goldenInputs() []string {
 		"app-root-redirect.yaml",
 		"list-and-others.json",
 		"hostless.yaml",
+		"class-filter.yaml",
 	}
 }
 
@@ -39,12 +40,28 @@ func genericGoldenInputs() []string {
 	}
 }
 
+// classGoldenInputs are the fixtures planned with a class filter: the plan
+// reports every Ingress the filter left out with a VAR-PLAN-0011 warning.
+//
+// Sources: docs/plan.md (the --ingress-class flag matches spec.ingressClassName
+// or the kubernetes.io/ingress.class annotation) and internal/plan/generate.go
+// (the class filter drops the resources that do not match).
+func classGoldenInputs() []string {
+	return []string{
+		"class-filter.yaml",
+	}
+}
+
 func goldenPath(input string) string {
 	return filepath.Join("..", "..", "testdata", "plan", strings.TrimSuffix(input, filepath.Ext(input))+".golden.json")
 }
 
 func genericGoldenPath(input string) string {
 	return filepath.Join("..", "..", "testdata", "plan", strings.TrimSuffix(input, filepath.Ext(input))+".generic.golden.json")
+}
+
+func classGoldenPath(input string) string {
+	return filepath.Join("..", "..", "testdata", "plan", strings.TrimSuffix(input, filepath.Ext(input))+".class.golden.json")
 }
 
 func renderPlanJSON(result plan.Plan) ([]byte, error) {
@@ -105,6 +122,22 @@ func TestGenericGoldenPlans(t *testing.T) {
 	for _, input := range genericGoldenInputs() {
 		t.Run(input, func(t *testing.T) {
 			assertGoldenPlan(t, input, plan.Options{Profile: plan.ProfileGeneric}, genericGoldenPath(input))
+		})
+	}
+}
+
+// TestClassFilterGoldenPlans proves the plan of a class-filtered corpus: every
+// Ingress the filter left out is reported with a VAR-PLAN-0011 warning, and
+// the warning names the Ingress, the class it declares and the class that was
+// requested.
+//
+// Sources: docs/plan.md (Known limitations: the excluded resource is dropped
+// and the regex scope is computed over the included resources only) and
+// internal/plan/generate.go (the class filter and the exclusion warning).
+func TestClassFilterGoldenPlans(t *testing.T) {
+	for _, input := range classGoldenInputs() {
+		t.Run(input, func(t *testing.T) {
+			assertGoldenPlan(t, input, plan.Options{IngressClass: "nginx"}, classGoldenPath(input))
 		})
 	}
 }
