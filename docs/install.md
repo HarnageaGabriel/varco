@@ -1,14 +1,15 @@
 # Install and verify varco
 
-Nothing is published yet. Until `v0.1.0` is released, install from source.
-The release commands below describe the signed artifacts that the release
-workflow will publish.
+`v0.1.0` is published as a pre-alpha pre-release on the
+[release page](https://github.com/HarnageaGabriel/varco/releases/tag/v0.1.0).
+The commands below download and verify the signed artifacts that the release
+workflow published.
 
 ## Release archive
 
 Choose the archive for your operating system and architecture on the
-[releases page](https://github.com/HarnageaGabriel/varco/releases). The example
-uses `v0.1.0` on Linux amd64:
+[release page](https://github.com/HarnageaGabriel/varco/releases/tag/v0.1.0).
+The example uses `v0.1.0` on Linux amd64:
 
 ```sh
 set -euo pipefail
@@ -63,8 +64,9 @@ brew install HarnageaGabriel/tap/varco
 
 ## Krew (planned)
 
-Krew support is planned for `v0.1.0`. Once `.krew.yaml` has the final archive
-hashes and is available in a configured Krew index:
+Krew support is prepared, not published: `.krew.yaml` in the repository has
+the final `v0.1.0` archive hashes but is not submitted to a Krew index yet.
+Once it is available in a configured Krew index:
 
 ```sh
 kubectl krew update
