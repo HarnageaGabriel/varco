@@ -59,6 +59,72 @@
       "note": "use-regex or rewrite-target makes matching case-insensitive (blog behaviors 1 to 3); pathType ImplementationSpecific is treated as a Prefix-like match; path \"/catalog(/|$)(.*)\" is a regex and is sampled as \"/catalog/varco-probe\"; rewrite-target rewrites the upstream path (blog behavior 3); rewrite-target capture groups enable regex matching for the whole host"
     },
     {
+      "id": "1298fa4bd267",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/cart",
+      "headers": [
+        {
+          "name": "Host",
+          "values": [
+            "shop.example.com:80"
+          ]
+        }
+      ],
+      "family": "host-variant",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the Host header may carry the port (RFC 9110 section 7.2), and this is its explicit default; SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
+    },
+    {
+      "id": "d0cf9d195c76",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/cart",
+      "headers": [
+        {
+          "name": "Host",
+          "values": [
+            "SHOP.EXAMPLE.COM"
+          ]
+        }
+      ],
+      "family": "host-variant",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the host is case-insensitive (RFC 3986 section 3.2.2); SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
+    },
+    {
+      "id": "fa3cb1f9eb45",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/cart",
+      "headers": [
+        {
+          "name": "Host",
+          "values": [
+            "shop.example.com."
+          ]
+        }
+      ],
+      "family": "host-variant",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the trailing dot is the fully-qualified form of the host; SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
+    },
+    {
       "id": "ebee16594702",
       "host": "shop.example.com",
       "scheme": "http",
@@ -72,6 +138,20 @@
         "annotation": "nginx.ingress.kubernetes.io/rewrite-target"
       },
       "note": "rewrite-target rewrites the upstream path (blog behavior 3); rewrite-target capture groups enable regex matching for the whole host"
+    },
+    {
+      "id": "a8d0c424f60c",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "HEAD",
+      "path": "/cart",
+      "family": "head",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "HEAD on the smallest planned path of the host; the comparison shows only whether old and new handle HEAD equivalently (RFC 9110 section 9.3.2)"
     },
     {
       "id": "944a55d22dd1",
@@ -138,72 +218,6 @@
       "note": "with use-regex the path is matched as a prefix regex, so /api may match /apivarco (blog behavior 1); rewrite-target rewrites the upstream path (blog behavior 3); rewrite-target capture groups enable regex matching for the whole host"
     },
     {
-      "id": "24e490584e91",
-      "host": "shop.example.com",
-      "scheme": "http",
-      "method": "GET",
-      "path": "/catalog/varco-probe",
-      "headers": [
-        {
-          "name": "Host",
-          "values": [
-            "SHOP.EXAMPLE.COM"
-          ]
-        }
-      ],
-      "family": "host-variant",
-      "source": {
-        "ingress": "varco",
-        "rule": 0,
-        "path": 0
-      },
-      "note": "the host is case-insensitive (RFC 3986 section 3.2.2); SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
-    },
-    {
-      "id": "9330d46cada4",
-      "host": "shop.example.com",
-      "scheme": "http",
-      "method": "GET",
-      "path": "/catalog/varco-probe",
-      "headers": [
-        {
-          "name": "Host",
-          "values": [
-            "shop.example.com:80"
-          ]
-        }
-      ],
-      "family": "host-variant",
-      "source": {
-        "ingress": "varco",
-        "rule": 0,
-        "path": 0
-      },
-      "note": "the Host header may carry the port (RFC 9110 section 7.2), and this is its explicit default; SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
-    },
-    {
-      "id": "b36d05ac3c85",
-      "host": "shop.example.com",
-      "scheme": "http",
-      "method": "GET",
-      "path": "/catalog/varco-probe",
-      "headers": [
-        {
-          "name": "Host",
-          "values": [
-            "shop.example.com."
-          ]
-        }
-      ],
-      "family": "host-variant",
-      "source": {
-        "ingress": "varco",
-        "rule": 0,
-        "path": 0
-      },
-      "note": "the trailing dot is the fully-qualified form of the host; SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
-    },
-    {
       "id": "6ea7882c84c9",
       "host": "shop.example.com",
       "scheme": "http",
@@ -217,20 +231,6 @@
         "annotation": "nginx.ingress.kubernetes.io/rewrite-target"
       },
       "note": "pathType ImplementationSpecific is treated as a Prefix-like match; path \"/catalog(/|$)(.*)\" is a regex and is sampled as \"/catalog/varco-probe\"; rewrite-target rewrites the upstream path (blog behavior 3); rewrite-target capture groups enable regex matching for the whole host"
-    },
-    {
-      "id": "0a2e53cba1bb",
-      "host": "shop.example.com",
-      "scheme": "http",
-      "method": "HEAD",
-      "path": "/catalog/varco-probe",
-      "family": "head",
-      "source": {
-        "ingress": "varco",
-        "rule": 0,
-        "path": 0
-      },
-      "note": "HEAD on the first planned path; the comparison shows only whether old and new handle HEAD equivalently (RFC 9110 section 9.3.2)"
     },
     {
       "id": "f78802175506",

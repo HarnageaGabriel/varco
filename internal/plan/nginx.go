@@ -36,7 +36,7 @@ type nginxProfile struct{}
 
 func (profile nginxProfile) prepareHost(host string, resource ingress.Ingress, builder *builder) {
 	if profile.regexEnabled(builder, resource) {
-		builder.markRegexHost(host, resource.Key())
+		builder.markRegexHost(host, resource)
 	}
 }
 
@@ -177,18 +177,62 @@ func (profile nginxProfile) httpRedirect(resource ingress.Ingress, tlsHost bool,
 	}
 }
 
-// markRegexHost records that a host is matched as a regex and warns once per
-// host, because the scope is host-wide and spans Ingress resources.
-func (b *builder) markRegexHost(host, ingressKey string) {
-	if _, ok := b.regexHosts[host]; ok {
-		return
+// markRegexHost records that a host is matched as a regex. The scope is
+// host-wide and spans Ingress resources, so every Ingress that turns it on is
+// recorded and the smallest one wins, whatever the order of the input.
+func (b *builder) markRegexHost(host string, resource ingress.Ingress) {
+	b.regexHosts[host] = true
+	source := regexSource{key: resource.Key(), namespace: resource.Namespace, name: resource.Name}
+	current, seen := b.regexSources[host]
+	if !seen || source.less(current) {
+		b.regexSources[host] = source
 	}
-	b.regexHosts[host] = ingressKey
-	b.addWarning(Warning{
-		Code:    diag.CodePlanRegexHostWide,
-		Ingress: ingressKey,
-		Message: fmt.Sprintf("use-regex or rewrite-target on %s makes ingress-nginx match every path of host %s as a case-insensitive regex", ingressKey, host),
-	})
+}
+
+// addPlanWarnings appends the warnings that need every resource of the plan.
+// The host-wide regex warning is added here, once every host is resolved, so
+// it names the same Ingress whatever the order of the input.
+func (profile nginxProfile) addPlanWarnings(builder *builder) {
+	builder.addRegexHostWarnings()
+}
+
+// addRegexHostWarnings warns once per host whose paths are matched as a regex.
+// The warning names the Ingress with the smallest namespace and name among
+// those that turned the host-wide scope on, so it does not depend on the order
+// of the input.
+func (b *builder) addRegexHostWarnings() {
+	hosts := make([]string, 0, len(b.regexSources))
+	for host := range b.regexSources {
+		hosts = append(hosts, host)
+	}
+	sort.Strings(hosts)
+	for _, host := range hosts {
+		source := b.regexSources[host]
+		b.addWarning(Warning{
+			Code:    diag.CodePlanRegexHostWide,
+			Ingress: source.key,
+			Message: fmt.Sprintf("use-regex or rewrite-target on %s makes ingress-nginx match every path of host %s as a case-insensitive regex", source.key, host),
+		})
+	}
+}
+
+// regexSource is the Ingress that turned host-wide regex matching on for a
+// host: the one with the smallest namespace and name among them.
+type regexSource struct {
+	// key is the "namespace/name" identity used by the warning.
+	key string
+	// namespace and name are the identity fields the sources are compared by.
+	namespace string
+	name      string
+}
+
+// less reports whether the source sorts before another one by namespace, then
+// by name, so the smallest one is picked independently of the input order.
+func (s regexSource) less(other regexSource) bool {
+	if s.namespace != other.namespace {
+		return s.namespace < other.namespace
+	}
+	return s.name < other.name
 }
 
 // addAnnotationFindings reports every nginx annotation varco cannot test

@@ -44,6 +44,86 @@
       }
     },
     {
+      "id": "1298fa4bd267",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/cart",
+      "headers": [
+        {
+          "name": "Host",
+          "values": [
+            "shop.example.com:80"
+          ]
+        }
+      ],
+      "family": "host-variant",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the Host header may carry the port (RFC 9110 section 7.2), and this is its explicit default; SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
+    },
+    {
+      "id": "d0cf9d195c76",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/cart",
+      "headers": [
+        {
+          "name": "Host",
+          "values": [
+            "SHOP.EXAMPLE.COM"
+          ]
+        }
+      ],
+      "family": "host-variant",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the host is case-insensitive (RFC 3986 section 3.2.2); SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
+    },
+    {
+      "id": "fa3cb1f9eb45",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/cart",
+      "headers": [
+        {
+          "name": "Host",
+          "values": [
+            "shop.example.com."
+          ]
+        }
+      ],
+      "family": "host-variant",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the trailing dot is the fully-qualified form of the host; SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
+    },
+    {
+      "id": "a8d0c424f60c",
+      "host": "shop.example.com",
+      "scheme": "http",
+      "method": "HEAD",
+      "path": "/cart",
+      "family": "head",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "HEAD on the smallest planned path of the host; the comparison shows only whether old and new handle HEAD equivalently (RFC 9110 section 9.3.2)"
+    },
+    {
       "id": "49043b6241de",
       "host": "shop.example.com",
       "scheme": "http",
@@ -96,86 +176,6 @@
         "rule": 0,
         "path": 0
       }
-    },
-    {
-      "id": "2228157dacc5",
-      "host": "shop.example.com",
-      "scheme": "http",
-      "method": "GET",
-      "path": "/catalog(/|$)(.*)",
-      "headers": [
-        {
-          "name": "Host",
-          "values": [
-            "shop.example.com."
-          ]
-        }
-      ],
-      "family": "host-variant",
-      "source": {
-        "ingress": "varco",
-        "rule": 0,
-        "path": 0
-      },
-      "note": "the trailing dot is the fully-qualified form of the host; SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
-    },
-    {
-      "id": "581e2ae855b2",
-      "host": "shop.example.com",
-      "scheme": "http",
-      "method": "GET",
-      "path": "/catalog(/|$)(.*)",
-      "headers": [
-        {
-          "name": "Host",
-          "values": [
-            "SHOP.EXAMPLE.COM"
-          ]
-        }
-      ],
-      "family": "host-variant",
-      "source": {
-        "ingress": "varco",
-        "rule": 0,
-        "path": 0
-      },
-      "note": "the host is case-insensitive (RFC 3986 section 3.2.2); SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
-    },
-    {
-      "id": "64d4630a996b",
-      "host": "shop.example.com",
-      "scheme": "http",
-      "method": "GET",
-      "path": "/catalog(/|$)(.*)",
-      "headers": [
-        {
-          "name": "Host",
-          "values": [
-            "shop.example.com:80"
-          ]
-        }
-      ],
-      "family": "host-variant",
-      "source": {
-        "ingress": "varco",
-        "rule": 0,
-        "path": 0
-      },
-      "note": "the Host header may carry the port (RFC 9110 section 7.2), and this is its explicit default; SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
-    },
-    {
-      "id": "84a5e382a747",
-      "host": "shop.example.com",
-      "scheme": "http",
-      "method": "HEAD",
-      "path": "/catalog(/|$)(.*)",
-      "family": "head",
-      "source": {
-        "ingress": "varco",
-        "rule": 0,
-        "path": 0
-      },
-      "note": "HEAD on the first planned path; the comparison shows only whether old and new handle HEAD equivalently (RFC 9110 section 9.3.2)"
     },
     {
       "id": "fd2e240f7670",
