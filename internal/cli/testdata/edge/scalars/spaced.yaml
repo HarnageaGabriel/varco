@@ -1,0 +1,12 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: spaced
+  namespace: edge
+spec:
+  rules:
+    - host: spaced.example.com
+      http:
+        paths:
+          - path: /a b
+            pathType: Prefix

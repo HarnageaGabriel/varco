@@ -1,0 +1,23 @@
+{
+  "apiVersion": "networking.k8s.io/v1",
+  "kind": "Ingress",
+  "metadata": {
+    "name": "gamma",
+    "namespace": "edge"
+  },
+  "spec": {
+    "rules": [
+      {
+        "host": "gamma.example.com",
+        "http": {
+          "paths": [
+            {
+              "path": "/gamma",
+              "pathType": "Prefix"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,93 @@
+# Every host and path is copied into the plan exactly as the manifest declares
+# it. varco rewrites a host only when it has to (a wildcard host is planned
+# under a concrete label) and never rewrites a path.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: unicode
+  namespace: edge
+spec:
+  rules:
+    - host: café.example.com
+      http:
+        paths:
+          - path: /café/☕
+            pathType: Prefix
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: idn
+  namespace: edge
+spec:
+  rules:
+    - host: münchen.example.com
+      http:
+        paths:
+          - path: /münchen
+            pathType: Prefix
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: uppercase
+  namespace: edge
+spec:
+  rules:
+    - host: API.Example.COM
+      http:
+        paths:
+          - path: /upper
+            pathType: Prefix
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: trailing-dot
+  namespace: edge
+spec:
+  rules:
+    - host: api.example.com.
+      http:
+        paths:
+          - path: /trailing
+            pathType: Prefix
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wildcard
+  namespace: edge
+spec:
+  rules:
+    - host: "*.example.com"
+      http:
+        paths:
+          - path: /wildcard
+            pathType: Prefix
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: encoded
+  namespace: edge
+spec:
+  rules:
+    - host: encoded.example.com
+      http:
+        paths:
+          - path: /a%2Fb%20c
+            pathType: Prefix
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: spaced
+  namespace: edge
+spec:
+  rules:
+    - host: spaced.example.com
+      http:
+        paths:
+          - path: /a b
+            pathType: Prefix

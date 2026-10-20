@@ -1,0 +1,12 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: alpha
+  namespace: edge
+spec:
+  rules:
+    - host: alpha.example.com
+      http:
+        paths:
+          - path: /alpha
+            pathType: Prefix
