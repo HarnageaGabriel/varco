@@ -171,10 +171,13 @@ func Run(ctx context.Context, config RunConfig, clk clock.Clock, probeFn ProbeFu
 				}
 				done++
 				completed := done
-				mu.Unlock()
+				// The progress callback runs under the mutex: workers must never
+				// enter it at the same time, and the reported count must stay
+				// monotone.
 				if err == nil && config.Progress != nil {
 					config.Progress(completed, len(cases), item, evaluation.Outcome)
 				}
+				mu.Unlock()
 			}(i, item)
 			continue
 		}

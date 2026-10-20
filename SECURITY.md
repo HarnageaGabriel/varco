@@ -21,3 +21,11 @@ The project follows coordinated vulnerability disclosure and maintains an
 EU Cyber Resilience Act-aligned vulnerability intake, assessment, remediation,
 and disclosure process. These targets are project goals, not a warranty or a
 statement that a particular CRA legal role applies.
+
+## Scope and hardening
+
+`varco` runs the `kubectl` binary it finds on `PATH` when it reads a cluster
+with `--from-cluster`. That process runs with the privileges of the user who
+started `varco`, and `varco` only ever passes the `get` verb to it. Make sure
+the `kubectl` on `PATH` is the one you trust, because it acts on your cluster
+with your credentials.

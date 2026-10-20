@@ -109,6 +109,59 @@ func TestDoRefusals(t *testing.T) {
 	}
 }
 
+// Source: review finding F5; the SNI of a plan or manifest case is checked
+// before it can reach the wire. An accepted name is sent, a rejected one
+// never reaches the server and the error never echoes the raw value.
+func TestDoSNIValidation(t *testing.T) {
+	var hits atomic.Int32
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+	address := server.Listener.Addr().String()
+	tests := []struct {
+		name   string
+		sni    string
+		accept bool
+	}{
+		{name: "plain host", sni: "api.example.com", accept: true},
+		{name: "underscore host", sni: "my_app.example.com", accept: true},
+		{name: "trailing dot", sni: "api.example.com.", accept: true},
+		{name: "space", sni: "api example.com"},
+		{name: "nul byte", sni: "api\x00.example.com"},
+		{name: "colon", sni: "api.example.com:443"},
+		{name: "slash", sni: "api.example.com/path"},
+		{name: "over length", sni: strings.Repeat("a", 250) + ".com"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			before := hits.Load()
+			request := Request{Endpoint: endpointOf(t, address), Scheme: "https", Host: "api.example.com", SNI: test.sni, Method: "GET", Path: "/", Timeout: 5 * time.Second}
+			_, err := Do(context.Background(), request)
+			if test.accept {
+				if err != nil {
+					t.Fatalf("SNI %q rejected: %v", test.sni, err)
+				}
+				if hits.Load() != before+1 {
+					t.Fatalf("hits = %d, want %d", hits.Load(), before+1)
+				}
+				return
+			}
+			var diagnostic *diag.Error
+			if !errors.As(err, &diagnostic) || diagnostic.Diagnostic.Code != diag.CodeInvalidFlag {
+				t.Fatalf("err = %v", err)
+			}
+			if strings.Contains(err.Error(), test.sni) {
+				t.Fatalf("error echoes the SNI: %v", err)
+			}
+			if hits.Load() != before {
+				t.Fatal("a rejected SNI reached the server")
+			}
+		})
+	}
+}
+
 func TestDoUnsafeMethodAllowed(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("X-A", "1")
