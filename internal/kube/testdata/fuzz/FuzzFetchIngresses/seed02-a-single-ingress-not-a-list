@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"apiVersion\": \"networking.k8s.io/v1\", \"kind\": \"Ingress\", \"metadata\": {\"name\": \"web\", \"namespace\": \"apps\"}, \"spec\": {\"rules\": [{\"host\": \"web.example.test\"}]}}")
