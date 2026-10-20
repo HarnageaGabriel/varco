@@ -4,6 +4,10 @@ All notable changes are documented here. Format: [Keep a Changelog](https://keep
 
 ## [Unreleased]
 
+### Added
+
+- Add the `host-variant` and `head` case families to `varco plan` (emitted by both the `nginx` and `generic` profiles, for every concrete declared host on its first planned path, SNI kept plain): `Host` header variants per RFC 3986 section 3.2.2 and RFC 9110 section 7.2 and one `HEAD` case per RFC 9110 section 9.3.2 (ADR 0005, docs/plan.md). The probe now accepts exactly one validated `Host` header override planned per request; `varco diff --header` still forbids `Host`.
+
 ## [0.1.0] - 2026-10-20
 
 The first pre-alpha release of varco; command output formats, JSON schemas and flags may still change between releases.

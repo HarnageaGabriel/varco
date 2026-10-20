@@ -223,9 +223,16 @@ func TestDoRejectsUnsafeInput(t *testing.T) {
 		{"host slash", func(r *Request) { r.Host = "h/x" }},
 		{"host at", func(r *Request) { r.Host = "u@h" }},
 		{"host empty", func(r *Request) { r.Host = "" }},
+		{"Host override CRLF", header("Host", "h\r\nX: 1")},
+		{"Host override slash", header("Host", "h/x")},
+		{"Host override at", header("Host", "u@h")},
+		{"Host override empty", header("Host", "")},
+		{"Host override two values", func(r *Request) { r.Headers = []result.Header{{Name: "Host", Values: []string{"a", "b"}}} }},
+		{"Host override duplicate", func(r *Request) {
+			r.Headers = []result.Header{{Name: "Host", Values: []string{"a"}}, {Name: "Host", Values: []string{"b"}}}
+		}},
 		{"header value CRLF", header("X-A", "a\r\nX-B: b")},
 		{"header name space", header("X A", "a")},
-		{"header Host", header("host", "a")},
 		{"header Content-Length", header("Content-Length", "5")},
 		{"header Transfer-Encoding", header("Transfer-Encoding", "chunked")},
 		{"header Trailer", header("Trailer", "X")},

@@ -70,6 +70,19 @@ func Do(ctx context.Context, request Request) (result.Result, error) {
 	if !ValidHost(request.Host) {
 		return result.Result{}, diagnosticError(diag.CodeInvalidFlag, fmt.Sprintf("invalid host %q", request.Host), nil)
 	}
+	override, headers, err := hostOverride(request.Headers)
+	if err != nil {
+		return result.Result{}, diagnosticError(diag.CodeInvalidFlag, err.Error(), nil)
+	}
+	if override != "" {
+		if !ValidHost(override) {
+			return result.Result{}, diagnosticError(diag.CodeInvalidFlag, fmt.Sprintf("invalid Host override %q", override), nil)
+		}
+		// The prober owns the Host line: a planned override replaces it so
+		// exactly one Host header is sent.
+		request.Host = override
+	}
+	request.Headers = headers
 	for _, header := range request.Headers {
 		if CredentialHeader(header.Name) {
 			return result.Result{}, diagnosticError(diag.CodeInvalidFlag, "credential request headers are not allowed", nil)
@@ -283,6 +296,37 @@ func ForbiddenHeader(name string) bool {
 		return true
 	}
 	return false
+}
+
+// hostOverride separates the planned Host header override of the host-variant
+// family (docs/adr/0005-plan-case-families.md) from the other request headers,
+// so the prober writes exactly one Host line per request. The override value is
+// validated like a case host before it replaces the probe's Host.
+func hostOverride(headers []result.Header) (string, []result.Header, error) {
+	if len(headers) == 0 {
+		return "", headers, nil
+	}
+	override := ""
+	sawHost := false
+	kept := make([]result.Header, 0, len(headers))
+	for _, header := range headers {
+		if !strings.EqualFold(header.Name, "Host") {
+			kept = append(kept, header)
+			continue
+		}
+		if sawHost {
+			return "", nil, fmt.Errorf("at most one Host header override is allowed")
+		}
+		sawHost = true
+		if len(header.Values) != 1 {
+			return "", nil, fmt.Errorf("the Host header override carries exactly one value")
+		}
+		override = header.Values[0]
+	}
+	if sawHost && override == "" {
+		return "", nil, fmt.Errorf("the Host header override must not be empty")
+	}
+	return override, kept, nil
 }
 
 // ValidHeaderName reports whether name is an RFC 9110 token.

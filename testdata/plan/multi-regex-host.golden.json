@@ -269,6 +269,90 @@
       "note": "pathType ImplementationSpecific is treated as a Prefix-like match; path \"/api/v1/items(/|$)(.*)\" is a regex and is sampled as \"/api/v1/items/varco-probe\""
     },
     {
+      "id": "346db1656ce5",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/api/v1/items/varco-probe",
+      "headers": [
+        {
+          "name": "Host",
+          "values": [
+            "API.EXAMPLE.COM"
+          ]
+        }
+      ],
+      "family": "host-variant",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the host is case-insensitive (RFC 3986 section 3.2.2); SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
+    },
+    {
+      "id": "cc8b174cbbc4",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/api/v1/items/varco-probe",
+      "headers": [
+        {
+          "name": "Host",
+          "values": [
+            "api.example.com."
+          ]
+        }
+      ],
+      "family": "host-variant",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the trailing dot is the fully-qualified form of the host; SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
+    },
+    {
+      "id": "e70f79d5ba12",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "GET",
+      "path": "/api/v1/items/varco-probe",
+      "headers": [
+        {
+          "name": "Host",
+          "values": [
+            "api.example.com:443"
+          ]
+        }
+      ],
+      "family": "host-variant",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the Host header may carry the port (RFC 9110 section 7.2), and this is its explicit default; SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
+    },
+    {
+      "id": "70e9550b1b1b",
+      "host": "api.example.com",
+      "sni": "api.example.com",
+      "scheme": "https",
+      "method": "HEAD",
+      "path": "/api/v1/items/varco-probe",
+      "family": "head",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "HEAD on the first planned path; the comparison shows only whether old and new handle HEAD equivalently (RFC 9110 section 9.3.2)"
+    },
+    {
       "id": "2154dab9afba",
       "host": "api.example.com",
       "scheme": "http",

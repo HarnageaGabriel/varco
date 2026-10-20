@@ -28,7 +28,7 @@ const (
 const (
 	// MethodGet is the base method for every family.
 	MethodGet = "GET"
-	// MethodHead is reserved for HEAD-only cases; no family emits it yet.
+	// MethodHead is used by the head family (RFC 9110 section 9.3.2).
 	MethodHead = "HEAD"
 	// MethodOptions is used for CORS preflight.
 	MethodOptions = "OPTIONS"
@@ -67,6 +67,12 @@ const (
 	FamilyDefaultBackend = "default-backend"
 	// FamilyUnmatchedRoute probes an unknown path on a host with no catch-all.
 	FamilyUnmatchedRoute = "unmatched-route"
+	// FamilyHostVariant sends the same path with a modified Host header, so a
+	// difference in host matching between the two controllers becomes visible.
+	FamilyHostVariant = "host-variant"
+	// FamilyHead sends a HEAD request on the first planned path, so a
+	// difference in HEAD handling between the two controllers becomes visible.
+	FamilyHead = "head"
 )
 
 // AnnotationIngressClass is the legacy class annotation varco honors next to
@@ -86,6 +92,10 @@ const defaultBackendHost = "varco-unknown.invalid"
 // unmatchedRoutePath is the unknown path of the unmatched-route case.
 const unmatchedRoutePath = "/varco-unmatched-route"
 
+// hostHeaderName is the header name of the host-variant cases. The probe layer
+// writes this override on its own Host line so exactly one Host header is sent.
+const hostHeaderName = "Host"
+
 // syntheticIngress labels cases varco derives from the plan as a whole rather
 // than from one Ingress resource.
 const syntheticIngress = "varco"
@@ -99,12 +109,17 @@ type builder struct {
 	hosts      [][]resolvedRule
 	regexHosts map[string]string
 	tlsHosts   map[string]bool
+	firstPaths map[string]string
 }
 
 // resolvedRule is the effective host of one rule, resolved once.
 type resolvedRule struct {
 	host string
 	ok   bool
+	// concrete records that the rule declared the host itself and it is not a
+	// wildcard label. Only concrete hosts get the head and host-variant cases,
+	// so those families compare the declared host, never varco's substitution.
+	concrete bool
 }
 
 // requested is one case before the host scheme and SNI are resolved.
@@ -212,6 +227,7 @@ func newBuilder(options Options) *builder {
 		plan:       Plan{Profile: planProfile},
 		regexHosts: map[string]string{},
 		tlsHosts:   map[string]bool{},
+		firstPaths: map[string]string{},
 	}
 }
 
@@ -236,10 +252,12 @@ func (b *builder) run(resources []ingress.Ingress) {
 	b.addSyntheticCases()
 }
 
-// addSyntheticCases appends the two plan-wide families: one default-backend
-// probe per scheme the plan uses, and one unmatched-route probe per host that
-// declares no Prefix or ImplementationSpecific "/" path. Both are derived from
-// the plan as a whole, not from one Ingress, and carry the synthetic source.
+// addSyntheticCases appends the plan-wide families, all derived from the plan as
+// a whole rather than from one Ingress and carried by the synthetic source:
+// a default-backend probe per scheme the plan uses, one unmatched-route probe
+// per host that declares no Prefix or ImplementationSpecific "/" path, and one
+// head plus host-variant group per concrete host on that host's first planned
+// path.
 func (b *builder) addSyntheticCases() {
 	schemes := make(map[string]bool, 2)
 	for _, item := range b.plan.Cases {
@@ -264,18 +282,29 @@ func (b *builder) addSyntheticCases() {
 			Note:   "an unknown host exercises the default backend and, over HTTPS, the default certificate",
 		})
 	}
-	hasCatchAll := make(map[string]bool)
 	var hostOrder []string
+	concrete := make(map[string]bool)
 	seen := make(map[string]bool)
-	for index, resource := range b.included {
-		for ruleIndex, rule := range resource.Rules {
-			resolved := b.hosts[index][ruleIndex]
+	for index := range b.hosts {
+		for _, resolved := range b.hosts[index] {
 			if !resolved.ok {
 				continue
 			}
 			if !seen[resolved.host] {
 				seen[resolved.host] = true
 				hostOrder = append(hostOrder, resolved.host)
+				if resolved.concrete {
+					concrete[resolved.host] = true
+				}
+			}
+		}
+	}
+	hasCatchAll := make(map[string]bool)
+	for index, resource := range b.included {
+		for ruleIndex, rule := range resource.Rules {
+			resolved := b.hosts[index][ruleIndex]
+			if !resolved.ok {
+				continue
 			}
 			for _, candidate := range rule.Paths {
 				if isCatchAllPath(candidate) {
@@ -302,6 +331,62 @@ func (b *builder) addSyntheticCases() {
 			Source: Source{Ingress: syntheticIngress},
 			Note:   "the host declares no Prefix or ImplementationSpecific / path, so an unknown path exercises the default backend",
 		})
+	}
+	b.addHostVariantAndHeadCases(hostOrder, concrete)
+}
+
+// addHostVariantAndHeadCases appends the host-variant and head cases for every
+// concrete host on that host's first planned path. Hosts substituted from a
+// wildcard label or filled in from --default-host are skipped: comparing host
+// handling for them would probe varco's substitution instead of the declared
+// host. same-path cases carry the synthetic source.
+func (b *builder) addHostVariantAndHeadCases(hostOrder []string, concrete map[string]bool) {
+	for _, host := range hostOrder {
+		if !concrete[host] {
+			continue
+		}
+		path := b.firstPaths[host]
+		if path == "" {
+			continue
+		}
+		scheme, sni := SchemeHTTP, ""
+		if b.tlsHosts[host] {
+			scheme, sni = SchemeHTTPS, host
+		}
+		port := ":443"
+		if scheme == SchemeHTTP {
+			port = ":80"
+		}
+		b.appendCase(Case{
+			Host:   host,
+			SNI:    sni,
+			Scheme: scheme,
+			Method: MethodHead,
+			Path:   path,
+			Family: FamilyHead,
+			Source: Source{Ingress: syntheticIngress},
+			Note:   "HEAD on the first planned path; the comparison shows only whether old and new handle HEAD equivalently (RFC 9110 section 9.3.2)",
+		})
+		for _, variant := range []struct {
+			value string
+			note  string
+		}{
+			{strings.ToUpper(host), "the host is case-insensitive (RFC 3986 section 3.2.2)"},
+			{host + ".", "the trailing dot is the fully-qualified form of the host"},
+			{host + port, "the Host header may carry the port (RFC 9110 section 7.2), and this is its explicit default"},
+		} {
+			b.appendCase(Case{
+				Host:    host,
+				SNI:     sni,
+				Scheme:  scheme,
+				Method:  MethodGet,
+				Path:    path,
+				Headers: []Header{{Name: hostHeaderName, Values: []string{variant.value}}},
+				Family:  FamilyHostVariant,
+				Source:  Source{Ingress: syntheticIngress},
+				Note:    joinNotes(variant.note, "SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"),
+			})
+		}
 	}
 }
 
@@ -344,7 +429,7 @@ func (b *builder) resolveHosts(index int, resource ingress.Ingress) {
 				Message: fmt.Sprintf("wildcard host %q is planned as %q", rule.Host, substituted),
 			})
 		default:
-			resolved[ruleIndex] = resolvedRule{host: rule.Host, ok: true}
+			resolved[ruleIndex] = resolvedRule{host: rule.Host, ok: true, concrete: true}
 		}
 		b.profile.prepareHost(resolved[ruleIndex].host, resource, b)
 		if resourceHasTLS(resource, rule.Host, resolved[ruleIndex].host) {
@@ -449,6 +534,11 @@ func (b *builder) emit(resource ingress.Ingress, host string, source Source, req
 	tls := b.tlsHosts[host]
 	if tls {
 		scheme, sni = SchemeHTTPS, host
+	}
+	// The first planned request target decides which path the head and
+	// host-variant cases send for this host.
+	if len(requests) > 0 && b.firstPaths[host] == "" {
+		b.firstPaths[host] = requests[0].path
 	}
 	redirect := b.profile.httpRedirect(resource, tls, b)
 	if redirect.sharedNote != "" {

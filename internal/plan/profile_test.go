@@ -50,6 +50,8 @@ func TestGenericProfileExcludesNginxFamiliesAndFindings(t *testing.T) {
 		FamilyHTTPRedirect:   true,
 		FamilyDefaultBackend: true,
 		FamilyUnmatchedRoute: true,
+		FamilyHead:           true,
+		FamilyHostVariant:    true,
 	}
 	for _, item := range result.Cases {
 		if forbidden[item.Family] {

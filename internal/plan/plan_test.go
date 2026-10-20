@@ -51,12 +51,18 @@ func pathsByFamily(result Plan) map[string][]string {
 // whole rather than from one declared route. The per-route tests below assert on
 // the declared-route families only; the synthetic families have their own test.
 func isSyntheticFamily(family string) bool {
-	return family == FamilyDefaultBackend || family == FamilyUnmatchedRoute
+	switch family {
+	case FamilyDefaultBackend, FamilyUnmatchedRoute, FamilyHead, FamilyHostVariant:
+		return true
+	default:
+		return false
+	}
 }
 
-// TestBuildSyntheticFamilies covers the two plan-wide families: one
-// default-backend probe per scheme the plan uses, and one unmatched-route probe
-// per host that declares no Prefix or ImplementationSpecific "/" path.
+// TestBuildSyntheticFamilies covers the default-backend and unmatched-route
+// plan-wide families: one default-backend probe per scheme the plan uses, and
+// one unmatched-route probe per host that declares no Prefix or
+// ImplementationSpecific "/" path. head and host-variant have their own tests.
 func TestBuildSyntheticFamilies(t *testing.T) {
 	resource := pathIngress("checkout", "api.example.com", "/api", "Prefix", nil)
 	resource.TLS = []ingress.TLS{{Hosts: []string{"api.example.com"}}}
