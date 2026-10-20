@@ -18,6 +18,7 @@ import (
 	"github.com/HarnageaGabriel/varco/internal/diag"
 	"github.com/HarnageaGabriel/varco/internal/endpoint"
 	"github.com/HarnageaGabriel/varco/internal/engine"
+	"github.com/HarnageaGabriel/varco/internal/ingress"
 	"github.com/HarnageaGabriel/varco/internal/kube"
 	"github.com/HarnageaGabriel/varco/internal/model"
 	"github.com/HarnageaGabriel/varco/internal/plan"
@@ -262,6 +263,9 @@ func loadRunPlan(planPath string, inputs stringsFlag, stdin io.Reader, options p
 	if planPath != "" {
 		content, err := readRunInput(planPath, stdin)
 		if err != nil {
+			if errors.Is(err, errInputTooLarge) {
+				return plan.Plan{}, planFailure(stderr, planPath, fmt.Sprintf("plan is larger than the %d-byte limit varco reads", ingress.MaxInputBytes))
+			}
 			return plan.Plan{}, configFailure(stderr, fmt.Sprintf("cannot read plan: %v", err))
 		}
 		var document struct {
@@ -277,6 +281,11 @@ func loadRunPlan(planPath string, inputs stringsFlag, stdin io.Reader, options p
 		if document.SchemaVersion != 1 {
 			return plan.Plan{}, configFailure(stderr, fmt.Sprintf("unsupported plan schema_version %d (want 1)", document.SchemaVersion))
 		}
+		for index, item := range document.Cases {
+			if reason := planCaseProblem(item); reason != "" {
+				return plan.Plan{}, configFailure(stderr, fmt.Sprintf("plan case at index %d has an invalid %s", index, reason))
+			}
+		}
 		return plan.Plan{Profile: document.Profile, Cases: document.Cases, Unsupported: document.Unsupported, Warnings: document.Warnings}, 0
 	}
 	paths, code := expandInputs(inputs, stderr)
@@ -290,12 +299,109 @@ func loadRunPlan(planPath string, inputs stringsFlag, stdin io.Reader, options p
 	return plan.Build(resources, options), 0
 }
 
-// readRunInput reads the plan document from a file or, for -, from stdin.
-func readRunInput(path string, stdin io.Reader) ([]byte, error) {
-	if path == stdinInput {
-		return io.ReadAll(stdin)
+// planCaseProblem reports why a planned case cannot be sent as written, or ""
+// when the case is valid. The reason names the offending field and never
+// repeats its value, so an untrusted plan cannot smuggle bytes into a
+// terminal through the error message.
+func planCaseProblem(item plan.Case) string {
+	if !probe.ValidHost(item.Host) {
+		return "host"
 	}
-	return os.ReadFile(path) //nolint:gosec // the path is the plan file the user named
+	if !probe.ValidPath(item.Path) {
+		return "path"
+	}
+	if !validPlanText(item.ID) {
+		return "id"
+	}
+	if !validPlanText(item.Family) {
+		return "family"
+	}
+	if !validPlanText(item.Note) {
+		return "note"
+	}
+	return planHeadersProblem(item.Headers)
+}
+
+// planHeadersProblem reports why the planned headers of a case cannot be sent
+// as written, or "". One Host header is allowed: the prober writes it on its
+// own Host line, so the host-variant family keeps working.
+func planHeadersProblem(headers []plan.Header) string {
+	hostHeaders := 0
+	for _, header := range headers {
+		if !probe.ValidHeaderName(header.Name) {
+			return "header name"
+		}
+		if strings.EqualFold(header.Name, "Host") {
+			hostHeaders++
+			if hostHeaders > 1 {
+				return "Host header"
+			}
+			if len(header.Values) != 1 || !probe.ValidHost(header.Values[0]) {
+				return "Host header"
+			}
+			continue
+		}
+		for _, value := range header.Values {
+			if !probe.ValidHeaderValue(value) {
+				return "header value"
+			}
+		}
+	}
+	return ""
+}
+
+// validPlanText reports whether a plan text field carries no control byte:
+// CR, LF, ESC and DEL are all rejected, so the field cannot rewrite a
+// terminal line.
+func validPlanText(value string) bool {
+	for i := 0; i < len(value); i++ {
+		if c := value[i]; c < 0x20 || c == 0x7f {
+			return false
+		}
+	}
+	return true
+}
+
+// planFailure prints a VAR-PLAN-0003 diagnostic for a plan document the CLI
+// cannot use and returns the usage exit code.
+func planFailure(stderr io.Writer, path string, message string) int {
+	diagnostic, _ := diag.New(diag.CodePlanManifest, message)
+	_, _ = fmt.Fprintf(stderr, "%s: %s: %s\n", diagnostic.Code, path, diagnostic.Message)
+	return 2
+}
+
+// errInputTooLarge reports that an input exceeded the cap varco reads.
+var errInputTooLarge = errors.New("input is larger than the limit varco reads")
+
+// readRunInput reads the plan document from a file or, for -, from stdin. The
+// input is read through a limit reader, so an endless or oversized plan can
+// never exhaust memory.
+func readRunInput(path string, stdin io.Reader) ([]byte, error) {
+	var reader io.Reader
+	if path == stdinInput {
+		reader = stdin
+	} else {
+		file, err := os.Open(path) //nolint:gosec // the path is the plan file the user named
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = file.Close() }()
+		reader = file
+	}
+	return readCapped(reader)
+}
+
+// readCapped reads a reader through the input cap, the same limit the manifest
+// parser uses. A larger input is refused instead of read.
+func readCapped(reader io.Reader) ([]byte, error) {
+	content, err := io.ReadAll(io.LimitReader(reader, ingress.MaxInputBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(content) > ingress.MaxInputBytes {
+		return nil, errInputTooLarge
+	}
+	return content, nil
 }
 
 // endpointPair resolves one side's --<label> base plus its per-scheme
@@ -329,18 +435,37 @@ func endpointPair(base, httpOverride, httpsOverride, label string, stderr io.Wri
 // loadExceptions reads and validates the exceptions file. Errors carry their
 // VAR-CFG-0002 diagnostic.
 func loadExceptions(path string) (policy.File, error) {
-	content, err := os.ReadFile(path) //nolint:gosec // the path is the exceptions file the user named
+	file, err := os.Open(path) //nolint:gosec // the path is the exceptions file the user named
 	if err != nil {
 		return policy.File{}, err
 	}
+	defer func() { _ = file.Close() }()
+	content, err := readCapped(file)
+	if err != nil {
+		if errors.Is(err, errInputTooLarge) {
+			return policy.File{}, exceptionsTooLarge()
+		}
+		return policy.File{}, err
+	}
 	return policy.Load(content)
+}
+
+// exceptionsTooLarge builds the VAR-CFG-0002 diagnostic for an exceptions file
+// above the input cap.
+func exceptionsTooLarge() error {
+	message := fmt.Sprintf("exceptions file is larger than the %d-byte limit varco reads", ingress.MaxInputBytes)
+	diagnostic, err := diag.New(diag.CodeExceptionsFile, message)
+	if err != nil {
+		return errors.New(message)
+	}
+	return &diag.Error{Diagnostic: diagnostic}
 }
 
 // writeRunReport renders the report to --output, or to stdout when unset.
 func writeRunReport(output, format string, runReport model.RunReport, options report.Options, stdout io.Writer) error {
 	writer := stdout
 	if output != "" {
-		file, err := os.Create(output) //nolint:gosec // the path is the output file the user named
+		file, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) //nolint:gosec // the path is the output file the user named
 		if err != nil {
 			return err
 		}

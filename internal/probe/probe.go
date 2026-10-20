@@ -70,6 +70,12 @@ func Do(ctx context.Context, request Request) (result.Result, error) {
 	if !ValidHost(request.Host) {
 		return result.Result{}, diagnosticError(diag.CodeInvalidFlag, fmt.Sprintf("invalid host %q", request.Host), nil)
 	}
+	if !validSNIOnWire(request.SNI) {
+		// The SNI of a plan or manifest case goes on the wire as the TLS
+		// server name, so it is checked like the host. The value itself is
+		// not echoed: it may carry the bytes that made it invalid.
+		return result.Result{}, diagnosticError(diag.CodeInvalidFlag, fmt.Sprintf("invalid TLS SNI server name (length %d)", len(request.SNI)), nil)
+	}
 	override, headers, err := hostOverride(request.Headers)
 	if err != nil {
 		return result.Result{}, diagnosticError(diag.CodeInvalidFlag, err.Error(), nil)
@@ -389,6 +395,34 @@ func ValidSNI(name string) bool {
 				return false
 			}
 		}
+	}
+	return true
+}
+
+// validSNIOnWire reports whether name may be sent as the TLS server name of a
+// probe. It is deliberately more permissive than ValidSNI, which guards the
+// --sni flag: a plan or a manifest may carry a host with an underscore in a
+// label, and such a host must still be probeable. It accepts letters, digits,
+// hyphen, underscore and dot labels, and an IP literal, which the TLS client
+// never puts in the SNI extension. It rejects the bytes that could change the
+// structure of the request: control bytes, whitespace, a colon, a slash, an at
+// sign, and names longer than 253 bytes.
+func validSNIOnWire(name string) bool {
+	if name == "" {
+		return true
+	}
+	if len(name) > 253 {
+		return false
+	}
+	if net.ParseIP(name) != nil {
+		return true
+	}
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' {
+			continue
+		}
+		return false
 	}
 	return true
 }

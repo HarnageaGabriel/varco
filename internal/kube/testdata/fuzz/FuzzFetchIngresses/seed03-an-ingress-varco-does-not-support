@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"apiVersion\": \"extensions/v1beta1\", \"kind\": \"Ingress\", \"metadata\": {\"name\": \"legacy\"}}")
