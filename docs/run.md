@@ -2,8 +2,9 @@
 
 `varco run` executes a probe plan against two endpoints, evaluates the observed
 differences through a separate policy layer, and prints a verdict. The plan is
-either the JSON produced by `varco plan --format json` or manifests planned
-in-process with the same options `varco plan` takes. Nothing but the two
+either the JSON produced by `varco plan --format json`, manifests planned
+in-process with the same options `varco plan` takes, or Ingresses read from a
+live cluster with `--from-cluster` (kubectl get only). Nothing but the two
 endpoints you name is contacted.
 
 The three layers — per-case outcome, aggregate verdict, exit code — are recorded
@@ -22,6 +23,7 @@ varco run --plan plan.json --old 10.0.0.1 --new 10.0.0.2 \
 varco run --plan plan.json --old 10.0.0.1 --new 10.0.0.2 --dry-run
 varco run --plan plan.json --old 10.0.0.1 --new 10.0.0.2 --repeat 3 \
   --suggest-exceptions suggested-exceptions.yaml
+varco run --from-cluster --old 10.0.0.1 --new 10.0.0.2
 ```
 
 ## Flags
@@ -30,6 +32,11 @@ varco run --plan plan.json --old 10.0.0.1 --new 10.0.0.2 --repeat 3 \
 |---|---|
 | `--plan FILE\|-` | plan JSON from `varco plan --format json`; `-` reads stdin. `schema_version` must be 1. |
 | `-f <file\|directory\|->` | manifests to plan in-process (repeatable); mutually exclusive with `--plan`. |
+| `--from-cluster` | read Ingresses and the controller ConfigMap with `kubectl get`; mutually exclusive with `--plan` and `-f`. |
+| `--namespace NS` | read Ingresses from this namespace (with `--from-cluster`; default: all namespaces). |
+| `--kube-context C` / `--kubeconfig F` / `--kube-timeout D` | select or bound kubectl access (with `--from-cluster`; `D` defaults to 30s). |
+| `--controller-configmap NS/NAME` | controller ConfigMap to read with `--from-cluster` (`ingress-nginx/ingress-nginx-controller` by default; empty disables). |
+| `--profile (nginx\|generic)` | planner profile for `-f`/`--from-cluster` input ([ADR 0008](adr/0008-planner-profiles.md)). Default `nginx`. |
 | `--ingress-class NAME` | plan only Ingress resources of this class (with `-f`). |
 | `--default-host HOST` | host for rules that declare none (with `-f`). |
 | `--old IP` / `--new IP` | the two endpoints; port 80 for `http` cases, 443 for `https` cases. |

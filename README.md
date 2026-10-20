@@ -25,11 +25,14 @@ before you change the DNS. It verifies behavior; it translates nothing.</h3>
 
 <p align="center">
   <a href="#try-it-now-compare-one-route-on-two-endpoints">Try it now</a> ·
+  <a href="#what-a-report-looks-like">A report</a> ·
   <a href="#design-goals">Design goals</a> ·
   <a href="#status">Status</a> ·
   <a href="#how-it-works">How it works</a> ·
   <a href="#getting-started">Getting started</a> ·
   <a href="#roadmap">Roadmap</a> ·
+  <a href="#security">Security</a> ·
+  <a href="#community">Community</a> ·
   <a href="#contributing">Contributing</a>
 </p>
 
@@ -49,29 +52,46 @@ answers.
 
 ## Try it now: compare one route on two endpoints
 
-Build the binary (see [Getting started](#getting-started)), then compare a
+Build the binary from a checkout
+([Getting started](#getting-started); nothing is published yet), then compare a
 single route. No cluster access is needed:
 
 ```sh
 varco diff --old 10.0.0.1 --new 10.0.0.2 --host api.example.com /
 ```
 
-Print the test cases varco would run for your manifests, and the things it
-cannot test:
+For whole manifests, use `plan` and `run` — plan first, look before you probe,
+then execute:
 
 ```sh
-varco plan -f ./manifests --format table
+varco plan -f ./manifests --format json > plan.json
+varco run --plan plan.json --old 10.0.0.1 --new 10.0.0.2 --dry-run
+varco run --plan plan.json --old 10.0.0.1 --new 10.0.0.2
 ```
 
-Exit status 0 means the two endpoints answered identically (EQUIVALENT), 1 means
-at least one difference was not accepted by policy (DIFFERENT), and 3 means a
-case could not be observed (INCONCLUSIVE); 1 wins over 3. See
-[exit-codes.md](docs/exit-codes.md). To execute a whole plan and accept known
-differences, use `varco run` with an exceptions file:
+Exit status 0 means the two endpoints answered identically (EQUIVALENT), 1
+means at least one difference was not accepted by policy (DIFFERENT), 2 is a
+usage or configuration error, 3 means a case could not be observed
+(INCONCLUSIVE; 1 wins over 3), and 4 is an internal error. See
+[exit-codes.md](docs/exit-codes.md) and the verdict model in
+[ADR 0007](docs/adr/0007-verdict-model.md). Known differences can be accepted
+with an exceptions file via `varco run --exceptions`; see
+[run.md](docs/run.md).
 
-```sh
-varco run --plan plan.json --old 10.0.0.1 --new 10.0.0.2 --exceptions exceptions.yaml
-```
+## What a report looks like
+
+`varco run --format table` prints the verdict, the coverage it rests on, and
+every case that is not EQUIVALENT — including differences policy accepted,
+marked with their exception id. Sensitive values are redacted by default.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme-run-report-dark.svg">
+    <img src="docs/assets/readme-run-report.svg"
+      alt="Terminal window with a varco run table report: verdict DIFFERENT with coverage and ignored fields, a DIFFERENT case-flip row for api.example.com/cb with status, Location, Content-Encoding, ETag and body differences plus a why/fix/see explanation line, and an INCONCLUSIVE base row reporting VAR-NET-0001: connection refused."
+      width="692">
+  </picture>
+</p>
 
 ## Design goals
 
@@ -99,10 +119,9 @@ varco is **pre-alpha**. Nothing is released yet.
 | Command | State |
 |---|---|
 | `varco diff` | Implemented: status, `Location`, security and CORS headers, TLS version, certificate and body hash across two endpoints. |
-| `varco plan` | Implemented: reads Ingress manifests and generates deterministic test cases plus unsupported findings. |
-| `varco run` | Implemented: plan execution, exceptions file, per-case verdict with coverage, repeated observations (`--repeat`) that accept unstable fields and `--suggest-exceptions`, body policy (`--body`), request budget (`--max-requests`), family/path filters, and `--dry-run` (M3, part 2). |
-| M3 the rest | Next: a JUnit summary. |
-| Cluster read, `kind` golden tests, releases | Planned. |
+| `varco plan` | Implemented: reads Ingress manifests or a live cluster (`--from-cluster`, `kubectl get` only) and generates deterministic test cases plus unsupported findings. Planner profiles `nginx` and `generic` per [ADR 0008](docs/adr/0008-planner-profiles.md). |
+| `varco run` | Implemented: plan execution against two endpoints with a verdict per [ADR 0007](docs/adr/0007-verdict-model.md), exceptions file, per-case outcome with coverage, repeated observations (`--repeat`), body policy (`--body`), request budget (`--max-requests`), family/path filters, `--dry-run`, `--suggest-exceptions`, deterministic explanations, redaction per [ADR 0006](docs/adr/0006-redaction.md). |
+| Releases | A release workflow produces draft releases from `v0.1.0`; no version is published yet. |
 
 The output formats and flags can still change before the first release.
 
@@ -117,7 +136,7 @@ flowchart LR
   D -->|same Host, same SNI| F[new controller IP]
   E --> G{compare}
   F --> G
-  G --> H[table / JSON / JUnit]
+  G --> H[table / JSON]
 ```
 
 **Plan.** For every host and path varco generates the cases that expose a
@@ -133,6 +152,7 @@ the Kubernetes post [Five Surprising Ingress-NGINX Behaviors](https://kubernetes
 | `http-redirect` | Plain HTTP redirected to HTTPS |
 | `cors-preflight` | The `OPTIONS` preflight when `enable-cors` is set |
 | `rewrite`, `app-root`, `redirect-annotation` | `rewrite-target`, `app-root`, `permanent-redirect` and `temporal-redirect` |
+| `default-backend`, `unmatched-route` | The controller's default backend and a request no rule catches (synthetic plan-wide cases) |
 
 Annotations that cannot be tested from outside, such as timeouts or backend
 protocol, are reported as findings. See [plan.md](docs/plan.md).
@@ -144,25 +164,24 @@ TLS version and certificate without trusting them, and hashes the body.
 
 **Compare.** It compares the status code, the `Location` header, security and
 CORS headers, the TLS version, the certificate and the body hash. Volatile
-headers such as `Date` and `Server` are left out. An exceptions file for
-accepted differences is planned for `varco run`.
+headers such as `Date` and `Server` are left out. An exceptions file marks
+accepted differences in `varco run`; see [run.md](docs/run.md).
 
 ## Getting started
 
-See [install.md](docs/install.md) for release downloads and verification.
-Requires Go 1.26 or newer; until a release is published, install with Go:
+See [install.md](docs/install.md) for the planned release downloads and
+verification. Nothing is published yet (pre-alpha), so install from a source
+checkout; requires Go 1.26 or newer:
 
 ```sh
-go install github.com/HarnageaGabriel/varco/cmd/varco@latest
-varco version
-```
-
-Or from a checkout:
-
-```sh
+git clone https://github.com/HarnageaGabriel/varco.git
+cd varco
 make build        # writes bin/varco
 make test lint
 ```
+
+When the first version is tagged, the release workflow publishes draft
+releases; they become downloadable once published.
 
 Usage details and examples are in [usage.md](docs/usage.md).
 
@@ -171,21 +190,39 @@ Usage details and examples are in [usage.md](docs/usage.md).
 - [x] **M0** Repository scaffold, CI, diagnostic-code registry, ADRs
 - [x] **M1** `varco diff` for one or more routes on two endpoints
 - [x] **M2** `varco plan` from Ingress manifests
-- [ ] **M2.5 Safety and correctness** Redaction by default, cookie attribute comparison, verdict model, and input limits (in progress)
-- [ ] **M3 `varco run`** Comparator and policy evaluator, exceptions file, repeated baseline observations for flaky fields, default-backend case family, body compared on 2xx by default, request budget and path exclusion, and JSON/JUnit/markdown summary
-- [ ] **M4 Production readiness** `kind` end-to-end tests with pinned ingress-nginx and Envoy Gateway, TLS version range and ALPN probes, opt-in TLS security policy, read-only cluster and ingress-nginx ConfigMap read, generic versus ingress-nginx planner rules, macOS and arm64 CI, signed releases with provenance, Homebrew, and krew
-- [ ] **M5 Adoption** Explanations for known ingress-nginx quirks, offline HTML report, and CI summaries
+- [x] **M2.5 Safety and correctness** Redaction by default, cookie attribute comparison, verdict model, and input limits
+- [x] **M3 `varco run`** Comparator and policy evaluator, exceptions file, default-backend and unmatched-route case families, repeated baseline observations for flaky fields, body compared on 2xx by default, request budget and path exclusion, `--dry-run` and `--suggest-exceptions`, and a JSON summary
+- [x] **M4 Production readiness, part 1** Release engineering (the release workflow produces draft releases from `v0.1.0`), planner profiles `nginx` and `generic` ([ADR 0008](docs/adr/0008-planner-profiles.md)), and read-only cluster read via kubectl get
+- [x] **M5 Adoption, part 1** Explanations for known ingress-nginx quirks on `DIFFERENT` cases
+- [ ] **Open for contributors** `kind` end-to-end tests with pinned ingress-nginx and Envoy Gateway (needs Docker), TLS version range and ALPN probes, opt-in TLS security policy, a JUnit/markdown run summary, offline HTML report, CI summaries, Homebrew and krew — see the issues labelled [`good first issue`](https://github.com/HarnageaGabriel/varco/issues?q=is%3Aopen+label%3A%22good+first+issue%22) and [`help wanted`](https://github.com/HarnageaGabriel/varco/issues?q=is%3Aopen+label%3A%22help+wanted%22)
 
 Out of scope: manifest translation, shadowing production traffic, load testing
 and authenticated flows. varco only checks the answer to an anonymous request,
 for example a 401 or a redirect to a login page.
 
+## Security
+
+- **Read-only.** varco never writes to a cluster or an endpoint; `--from-cluster` invokes only `kubectl get`.
+- **Safe methods only.** Plans send only `GET`, `HEAD` and `OPTIONS`; `varco diff` does the same unless you pass `--allow-unsafe-methods`. Redirects are never followed and no credential is ever generated.
+- **Redaction by default.** Location query values, cookie values and other sensitive strings come out as `REDACTED` ([ADR 0006](docs/adr/0006-redaction.md)); `--show-sensitive` opts out with a warning.
+- **No telemetry.** varco contacts only the endpoints you name; no external service, no metrics.
+- **Reporting.** Vulnerabilities go through the process in [SECURITY.md](SECURITY.md).
+
+The release workflow produces draft releases from `v0.1.0` (goreleaser with checksums, SBOMs and cosign signatures). Nothing is published yet.
+
+## Community
+
+Good places to start:
+
+- Issues labelled [`good first issue`](https://github.com/HarnageaGabriel/varco/issues?q=is%3Aopen+label%3A%22good+first+issue%22)
+- Issues labelled [`help wanted`](https://github.com/HarnageaGabriel/varco/issues?q=is%3Aopen+label%3A%22help+wanted%22)
+
 ## Contributing
 
 Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) and
 [CONVENTIONS.md](CONVENTIONS.md) first. Commits need a DCO sign-off
-(`git commit -s`). Architecture decisions live in [docs/adr](docs/adr). Report
-vulnerabilities as described in [SECURITY.md](SECURITY.md).
+(`git commit -s`). Architecture decisions live in [docs/adr](docs/adr).
+Maintainer workflow notes are in [docs/maintainers.md](docs/maintainers.md).
 
 ## FAQ
 
@@ -198,10 +235,20 @@ you set up for the cutover.
 Shadowing is more invasive and out of scope for now. varco proves route-level
 equivalence from the Ingress definitions.
 
+**What do the exit codes mean?**
+`0` EQUIVALENT, `1` DIFFERENT (a difference policy did not accept), `2` invalid
+usage or configuration, `3` INCONCLUSIVE, `4` internal error. A proven
+difference outranks missing data: `1` wins over `3`. See
+[exit-codes.md](docs/exit-codes.md) and the verdict model in
+[ADR 0007](docs/adr/0007-verdict-model.md).
+
 **Does it read the controller ConfigMap?**
-No. ConfigMap defaults such as timeouts, TLS policy and body size do not
-appear on Ingress resources, but their effects show up on the wire, which is
-what varco compares. `varco plan` lists what it cannot observe.
+Yes, optionally: with `--from-cluster` varco reads the ingress-nginx
+controller ConfigMap with `kubectl get` and warns about settings that change
+behavior on the wire (redirects, HSTS, TLS policy, auth, CORS). It only reads;
+without `--from-cluster` it needs no cluster access at all. ConfigMap defaults
+are still not guessed: what happens on the wire is what varco compares, and
+`varco plan` lists what it cannot observe.
 
 **Is it only for ingress-nginx?**
 No. The old and new endpoints can be any two proxies. ingress-nginx is only
@@ -211,11 +258,16 @@ where the test cases come from.
 
 - [Usage](docs/usage.md)
 - [Plan: case families and findings](docs/plan.md)
+- [Run: flags, exceptions and the report](docs/run.md)
 - [Exit codes](docs/exit-codes.md)
 - [Diagnostic codes](docs/diagnostics/README.md)
 - [Architecture decisions](docs/adr)
+- [Maintainers](docs/maintainers.md)
+- [Release process](docs/release-process.md)
 - [Changelog](CHANGELOG.md)
 
 ## License
 
-[Apache-2.0](LICENSE). Free to use, with no paid edition.
+[Apache-2.0](LICENSE). Free to use, with no paid edition. Third-party license
+notices are collected in [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES); the
+name varco is subject to the trademark policy in [TRADEMARKS.md](TRADEMARKS.md).

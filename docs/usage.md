@@ -1,5 +1,13 @@
 # Usage
 
+## Choosing between diff, plan and run
+
+All three read only what you pass them; nothing sends traffic without `diff` or `run`:
+
+- **`varco diff`** sends one request (or a few paths) to two endpoints and reports the differences directly. Fastest way to check one route; no manifests needed.
+- **`varco plan`** derives the probe cases `run` would execute from Ingress manifests (`-f`, or a live cluster with `--from-cluster`) and lists what it cannot test. Sends nothing, contacts nothing (outside `kubectl get` with `--from-cluster`).
+- **`varco run`** executes a plan against the two endpoints and evaluates the observed differences through the policy layer with a verdict per [ADR 0007](adr/0007-verdict-model.md). Start with `--dry-run` to see the requests a run would send.
+
 ## varco plan
 
 Reads Kubernetes Ingress manifests and prints the probe cases `varco run` will execute, plus what varco cannot test. Nothing is sent to the network and no cluster is contacted.
@@ -8,7 +16,9 @@ Reads Kubernetes Ingress manifests and prints the probe cases `varco run` will e
 varco plan -f ingress.yaml --format json
 ```
 
-Flags: `-f <file|directory|->` (repeatable; directories are walked recursively over `*.yaml`, `*.yml` and `*.json`, sorted by path), `--format (table|json)`, `--ingress-class NAME`, `--default-host HOST`. Manifests must be `networking.k8s.io/v1`; `kind: List` and multi-document streams are accepted and other kinds are ignored. Exit code 0 means a plan was produced (unsupported findings are part of the output), 2 is a usage or manifest parse error, 4 means the report could not be written. Case families, findings and the stable JSON schema are documented in [plan.md](plan.md).
+Flags: `-f <file|directory|->` (repeatable; directories are walked recursively over `*.yaml`, `*.yml` and `*.json`, sorted by path), `--format (table|json)`, `--ingress-class NAME`, `--default-host HOST`, `--profile (nginx|generic)`. Manifests must be `networking.k8s.io/v1`; `kind: List` and multi-document streams are accepted and other kinds are ignored. Exit code 0 means a plan was produced (unsupported findings are part of the output), 2 is a usage or manifest parse error, 4 means the report could not be written. Case families, findings and the stable JSON schema are documented in [plan.md](plan.md).
+
+`--profile` picks the planner behavior ([ADR 0008](adr/0008-planner-profiles.md)): `nginx` (default) adds the ingress-nginx annotation families; `generic` is controller-agnostic, plans only the core HTTP families, and warns that annotations are ignored (`VAR-PLAN-0009`). The top-level `profile` of the JSON output records which one was used.
 
 ### Example: plan a directory of manifests
 
@@ -26,7 +36,7 @@ varco plan --from-cluster --namespace apps --format json
 varco run --from-cluster --old 10.0.0.1 --new 10.0.0.2
 ```
 
-Use `--kube-context CONTEXT`, `--kubeconfig FILE`, and `--kube-timeout DURATION` to select or bound kubectl access. `--controller-configmap NAMESPACE/NAME` defaults to `ingress-nginx/ingress-nginx-controller`; pass an empty value to disable ConfigMap warnings. `--from-cluster` is mutually exclusive with `-f` and `--plan`.
+Use `--kube-context CONTEXT`, `--kubeconfig FILE`, and `--kube-timeout DURATION` to select or bound kubectl access. `--controller-configmap NAMESPACE/NAME` defaults to `ingress-nginx/ingress-nginx-controller`; pass an empty value to disable ConfigMap warnings. Recognized settings surface as `VAR-PLAN-0010` warnings with sensitive values redacted; unrecognized keys are ignored. `--from-cluster` is mutually exclusive with `-f` and `--plan`.
 
 A read-only identity needs permission to list Ingresses cluster-wide (or in `--namespace`) and get the controller ConfigMap. For example:
 
@@ -57,7 +67,11 @@ varco run --plan plan.json --old 10.0.0.1 --new 10.0.0.2
 varco run -f ingress.yaml --old 10.0.0.1 --new 10.0.0.2 --exceptions exceptions.yaml --format json
 ```
 
-Flags: `--plan FILE|-`, `-f <file|directory|->`, `--ingress-class`, `--default-host`, `--old`, `--new`, `--old-http`, `--old-https`, `--new-http`, `--new-https`, `--exceptions FILE`, `--format (table|json)`, `--output FILE`, `--rate`, `--concurrency`, `--timeout`, `--quiet`, `--show-sensitive`. `--plan` and `-f` are mutually exclusive. The exceptions file reference and the report schema are documented in [run.md](run.md).
+Flags: `--plan FILE|-`, `-f <file|directory|->`, `--ingress-class`, `--default-host`, `--profile (nginx|generic)`, `--old`, `--new`, `--old-http`, `--old-https`, `--new-http`, `--new-https`, `--exceptions FILE`, `--format (table|json)`, `--output FILE`, `--rate`, `--concurrency`, `--timeout`, `--repeat N`, `--body (2xx|hash|none)`, `--max-requests N`, `--family NAME` (repeatable), `--exclude-path GLOB` (repeatable), `--dry-run`, `--suggest-exceptions FILE`, `--quiet`, `--show-sensitive`. For cluster input, the same flags as `varco plan` apply: `--from-cluster`, `--namespace`, `--kube-context`, `--kubeconfig`, `--kube-timeout`, `--controller-configmap`. `--plan` and `-f` are mutually exclusive, and both are mutually exclusive with `--from-cluster`. The exceptions file reference, the request budget, the dry-run format and the report schema are documented in [run.md](run.md).
+
+### Exit codes and verdicts
+
+`varco run` exits `0` when the aggregate verdict is `EQUIVALENT`, `1` for `DIFFERENT`, `3` for `INCONCLUSIVE` (including cases skipped by `--max-requests` or a failed probe), `2` for usage or configuration errors and `4` for internal errors. A proven difference outranks missing data: `1` wins over `3`. Three layers — per-case outcome, aggregate verdict, exit code — are defined in [ADR 0007](adr/0007-verdict-model.md); the full table is in [exit-codes.md](exit-codes.md).
 
 ## varco diff
 
