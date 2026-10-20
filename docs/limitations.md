@@ -44,11 +44,12 @@ Authenticated flows are explicitly out of scope in the
 resources that were read, so a route that is not declared there is never
 probed. Three selectors narrow that set further:
 
-- `--ingress-class NAME` drops every Ingress of another class, and it does so
-  silently: the dropped resource produces no finding ([plan.md](plan.md), Known
-  limitations: "that resource is dropped without a finding, and regex scope is
-  computed over the included resources only, so an excluded `use-regex` Ingress
-  changes the host scope silently").
+- `--ingress-class NAME` drops every Ingress of another class. The drop is
+  reported: every excluded Ingress produces a `VAR-PLAN-0011` warning that
+  names the Ingress, the class it declares and the class that was requested
+  ([plan.md](plan.md), Warnings). The regex scope is still computed over the
+  included resources only, so an excluded `use-regex` Ingress changes the host
+  scope silently.
 - A rule with no host is planned on `--default-host`, so the probed host is
   one you supplied, not one the manifest declares
   ([plan.md](plan.md); [`internal/plan/generate.go`](../internal/plan/generate.go),
@@ -415,7 +416,9 @@ record; each item names the reason it is outside varco's reach.
    subdomains, and never the wildcard certificate they share
    ([plan.md](plan.md); [ADR 0005](adr/0005-plan-case-families.md)).
 10. **Routes that no Ingress declares**, and the Ingresses that
-    `--ingress-class` silently dropped ([plan.md](plan.md), Known limitations).
+    `--ingress-class` left out of the plan: they are reported as
+    `VAR-PLAN-0011`, but no case was planned for them
+    ([plan.md](plan.md), Known limitations).
 11. **DNS itself**: the record, its TTL, the resolver caches and the moment of
     the switch. varco dials IPs and never resolves a name
     ([`internal/endpoint/endpoint.go`](../internal/endpoint/endpoint.go)).

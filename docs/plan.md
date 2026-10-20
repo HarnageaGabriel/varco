@@ -23,7 +23,9 @@ Flags: `-f <file|directory|->` (repeatable; a directory is walked recursively
 and only regular `*.yaml`, `*.yml` and `*.json` files are read, sorted by path;
 symlinks and other non-regular files are skipped), `--format (table|json)`,
 `--ingress-class NAME` (matches `spec.ingressClassName` or the
-`kubernetes.io/ingress.class` annotation), `--default-host HOST` (used by rules
+`kubernetes.io/ingress.class` annotation; an Ingress that matches neither is
+left out of the plan and reported with a `VAR-PLAN-0011` warning),
+`--default-host HOST` (used by rules
 that declare no host), and `--profile (nginx|generic)` (default `nginx`; also
 available on `varco run -f`). One input, file or stream, is read through an 8 MiB cap;
 a larger input is rejected with `VAR-PLAN-0003`.
@@ -185,6 +187,7 @@ Warnings are the `warnings` array: conditions that qualify the cases.
 | `VAR-PLAN-0006` | host-wide regex scope caused by `use-regex` or `rewrite-target` |
 | `VAR-PLAN-0007` | an annotation value is not a boolean, so varco treats it as unset |
 | `VAR-PLAN-0009` | annotations ignored by the generic profile, with the count for one Ingress |
+| `VAR-PLAN-0011` | an Ingress left out of the plan because its class does not match `--ingress-class`, with the class it declares and the class that was requested |
 
 Cases are validated before they are emitted: a host, path or header value
 containing CR, LF or another control byte (or a path with a space or without a
@@ -228,5 +231,9 @@ never planned and never guessed.
 - The generic profile ignores controller annotations rather than translating
   their behavior; use `nginx` when those annotations are under test.
 - `ssl-redirect` on a host without `spec.tls` plans an `http-redirect` case and cases that are still served with `scheme: http`, so some cases differ only by family and note.
-- When `--ingress-class` excludes an Ingress, that resource is dropped without a finding, and regex scope is computed over the included resources only, so an excluded `use-regex` Ingress changes the host scope silently.
+- When `--ingress-class` excludes an Ingress, no case is planned for it and the
+  exclusion is reported with a `VAR-PLAN-0011` warning that names the Ingress,
+  the class it declares and the class that was requested. The regex scope is
+  still computed over the included resources only, so an excluded `use-regex`
+  Ingress changes the host scope silently.
 - Not-testable annotation classification is name-based and is not reclassified per annotation.
