@@ -132,8 +132,12 @@ func loadClusterPlanWithRunner(runner kube.Runner, namespace string, timeout tim
 	return resources, controllerConfig, 0
 }
 
+// kubeFailure prints the kubectl failure to stderr. The stderr of kubectl is
+// text a remote server controls, so it is redacted, truncated and escaped: a
+// control byte in it must not reach the operator's terminal
+// (docs/adr/0006-redaction.md).
 func kubeFailure(stderr io.Writer, err error) int {
-	_, _ = fmt.Fprintln(stderr, "kube:", redact.Text(truncateError(err.Error(), 2<<10)))
+	_, _ = fmt.Fprintln(stderr, "kube:", redact.EscapeControl(redact.Text(truncateError(err.Error(), 2<<10))))
 	return 2
 }
 
