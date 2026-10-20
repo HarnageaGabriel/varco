@@ -1,0 +1,390 @@
+{
+  "schema_version": 1,
+  "profile": "nginx",
+  "cases": [
+    {
+      "id": "9e8e707b6eef",
+      "host": "class-checkout.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "//checkout",
+      "family": "double-slash",
+      "source": {
+        "ingress": "shop/checkout",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "repeated slashes are normalized or answered with 301 (blog behavior 5)"
+    },
+    {
+      "id": "66b9da74f051",
+      "host": "class-checkout.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/checkout",
+      "family": "base",
+      "source": {
+        "ingress": "shop/checkout",
+        "rule": 0,
+        "path": 0
+      }
+    },
+    {
+      "id": "01af9a0fdb91",
+      "host": "class-checkout.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/checkout",
+      "headers": [
+        {
+          "name": "Host",
+          "values": [
+            "class-checkout.example.com."
+          ]
+        }
+      ],
+      "family": "host-variant",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the trailing dot is the fully-qualified form of the host; SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
+    },
+    {
+      "id": "630663bb6f87",
+      "host": "class-checkout.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/checkout",
+      "headers": [
+        {
+          "name": "Host",
+          "values": [
+            "CLASS-CHECKOUT.EXAMPLE.COM"
+          ]
+        }
+      ],
+      "family": "host-variant",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the host is case-insensitive (RFC 3986 section 3.2.2); SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
+    },
+    {
+      "id": "73b986e9e608",
+      "host": "class-checkout.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/checkout",
+      "headers": [
+        {
+          "name": "Host",
+          "values": [
+            "class-checkout.example.com:80"
+          ]
+        }
+      ],
+      "family": "host-variant",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the Host header may carry the port (RFC 9110 section 7.2), and this is its explicit default; SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
+    },
+    {
+      "id": "aca6561f4263",
+      "host": "class-checkout.example.com",
+      "scheme": "http",
+      "method": "HEAD",
+      "path": "/checkout",
+      "family": "head",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "HEAD on the smallest planned path of the host; the comparison shows only whether old and new handle HEAD equivalently (RFC 9110 section 9.3.2)"
+    },
+    {
+      "id": "db66d70c84d8",
+      "host": "class-checkout.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/checkout/",
+      "family": "trailing-slash",
+      "source": {
+        "ingress": "shop/checkout",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "declared without a trailing slash; probes the same path with an extra slash (blog behavior 4); probes slash handling, expected behavior unverified (VERIFY)"
+    },
+    {
+      "id": "fa44da04805e",
+      "host": "class-checkout.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/checkout/varco-probe",
+      "family": "subpath",
+      "source": {
+        "ingress": "shop/checkout",
+        "rule": 0,
+        "path": 0
+      }
+    },
+    {
+      "id": "72b0a955c96e",
+      "host": "class-checkout.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/checkoutvarco",
+      "family": "prefix-boundary",
+      "source": {
+        "ingress": "shop/checkout",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "Prefix matches by path element, so /api must not match /apivarco (blog behavior 1)"
+    },
+    {
+      "id": "d77159d3d069",
+      "host": "class-checkout.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco-unmatched-route",
+      "family": "unmatched-route",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the host declares no Prefix or ImplementationSpecific / path, so an unknown path exercises the default backend"
+    },
+    {
+      "id": "6fd69d6edd82",
+      "host": "class-checkout.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco/../checkout",
+      "family": "dot-segments",
+      "source": {
+        "ingress": "shop/checkout",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "dot segments are resolved before matching (blog behavior 5)"
+    },
+    {
+      "id": "04413dc36d64",
+      "host": "class-legacy.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "//legacy",
+      "family": "double-slash",
+      "source": {
+        "ingress": "shop/legacy",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "repeated slashes are normalized or answered with 301 (blog behavior 5)"
+    },
+    {
+      "id": "cd22bcce676f",
+      "host": "class-legacy.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/legacy",
+      "family": "base",
+      "source": {
+        "ingress": "shop/legacy",
+        "rule": 0,
+        "path": 0
+      }
+    },
+    {
+      "id": "175f23c10a88",
+      "host": "class-legacy.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/legacy",
+      "headers": [
+        {
+          "name": "Host",
+          "values": [
+            "CLASS-LEGACY.EXAMPLE.COM"
+          ]
+        }
+      ],
+      "family": "host-variant",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the host is case-insensitive (RFC 3986 section 3.2.2); SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
+    },
+    {
+      "id": "34a6d05e1232",
+      "host": "class-legacy.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/legacy",
+      "headers": [
+        {
+          "name": "Host",
+          "values": [
+            "class-legacy.example.com."
+          ]
+        }
+      ],
+      "family": "host-variant",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the trailing dot is the fully-qualified form of the host; SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
+    },
+    {
+      "id": "c399b9d746ab",
+      "host": "class-legacy.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/legacy",
+      "headers": [
+        {
+          "name": "Host",
+          "values": [
+            "class-legacy.example.com:80"
+          ]
+        }
+      ],
+      "family": "host-variant",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the Host header may carry the port (RFC 9110 section 7.2), and this is its explicit default; SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
+    },
+    {
+      "id": "d5d833a541d6",
+      "host": "class-legacy.example.com",
+      "scheme": "http",
+      "method": "HEAD",
+      "path": "/legacy",
+      "family": "head",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "HEAD on the smallest planned path of the host; the comparison shows only whether old and new handle HEAD equivalently (RFC 9110 section 9.3.2)"
+    },
+    {
+      "id": "07bc744180d9",
+      "host": "class-legacy.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/legacy/",
+      "family": "trailing-slash",
+      "source": {
+        "ingress": "shop/legacy",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "declared without a trailing slash; probes the same path with an extra slash (blog behavior 4); probes slash handling, expected behavior unverified (VERIFY)"
+    },
+    {
+      "id": "4c61236379b4",
+      "host": "class-legacy.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/legacy/varco-probe",
+      "family": "subpath",
+      "source": {
+        "ingress": "shop/legacy",
+        "rule": 0,
+        "path": 0
+      }
+    },
+    {
+      "id": "585d687e6911",
+      "host": "class-legacy.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/legacyvarco",
+      "family": "prefix-boundary",
+      "source": {
+        "ingress": "shop/legacy",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "Prefix matches by path element, so /api must not match /apivarco (blog behavior 1)"
+    },
+    {
+      "id": "0ee99c8eb9d6",
+      "host": "class-legacy.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco-unmatched-route",
+      "family": "unmatched-route",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the host declares no Prefix or ImplementationSpecific / path, so an unknown path exercises the default backend"
+    },
+    {
+      "id": "ed0df653103b",
+      "host": "class-legacy.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/varco/../legacy",
+      "family": "dot-segments",
+      "source": {
+        "ingress": "shop/legacy",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "dot segments are resolved before matching (blog behavior 5)"
+    },
+    {
+      "id": "97693a99585f",
+      "host": "varco-unknown.invalid",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/",
+      "family": "default-backend",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "an unknown host exercises the default backend and, over HTTPS, the default certificate"
+    }
+  ],
+  "unsupported": [],
+  "warnings": [
+    {
+      "code": "VAR-PLAN-0011",
+      "ingress": "shop/catalog",
+      "message": "shop/catalog is excluded by --ingress-class \"nginx\": it declares class \"traefik\" (spec.ingressClassName)"
+    },
+    {
+      "code": "VAR-PLAN-0011",
+      "ingress": "shop/classless",
+      "message": "shop/classless is excluded by --ingress-class \"nginx\": it declares no class"
+    },
+    {
+      "code": "VAR-PLAN-0011",
+      "ingress": "shop/search",
+      "message": "shop/search is excluded by --ingress-class \"nginx\": it declares class \"traefik\" (kubernetes.io/ingress.class)"
+    }
+  ]
+}
