@@ -224,6 +224,55 @@ metadata:
 	}
 }
 
+// Source: internal/ingress/ingress.go documentError; every manifest failure
+// names the diagnostic code first and the document after it, so a decode
+// error, a validation error and a parse error read the same way:
+// VAR-PLAN-0003: document 1: ...
+func TestManifestErrorsPutTheCodeFirst(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{
+			name:  "yaml decode error",
+			input: "apiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n\tname: tab\n",
+		},
+		{
+			name:  "unsupported api version",
+			input: "apiVersion: extensions/v1beta1\nkind: Ingress\nmetadata:\n  name: legacy\n",
+		},
+		{
+			name:  "annotation is not a scalar",
+			input: "apiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n  name: annotated\n  annotations:\n    bad:\n      nested: value\n",
+		},
+		{
+			name:  "document is not a kubernetes object",
+			input: "- apiVersion: networking.k8s.io/v1\n",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := Parse(strings.NewReader(test.input))
+			if err == nil {
+				t.Fatal("Parse() error = nil, want a manifest error")
+			}
+			if !strings.HasPrefix(err.Error(), "VAR-PLAN-0003: document 1: ") {
+				t.Fatalf("Parse() error = %q, want the code first", err)
+			}
+			var diagnostic *diag.Error
+			if !errors.As(err, &diagnostic) {
+				t.Fatalf("Parse() error %v does not carry a diagnostic", err)
+			}
+			if diagnostic.Diagnostic.Code != diag.CodePlanManifest {
+				t.Fatalf("diagnostic code = %s, want %s", diagnostic.Diagnostic.Code, diag.CodePlanManifest)
+			}
+			if !strings.HasPrefix(diagnostic.Diagnostic.Message, "document 1: ") {
+				t.Fatalf("diagnostic message = %q, want the document first", diagnostic.Diagnostic.Message)
+			}
+		})
+	}
+}
+
 func TestParseLimits(t *testing.T) {
 	tests := []struct {
 		name    string
