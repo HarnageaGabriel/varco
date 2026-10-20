@@ -11,35 +11,39 @@ import (
 	"github.com/HarnageaGabriel/varco/internal/redact"
 )
 
+// explanationIndent is the number of empty cells an explanation row is
+// indented by, so the explanation lines up under the difference columns.
+const explanationIndent = 10
+
 // RunTable writes the run summary block followed by one row per
 // non-EQUIVALENT case and its differences. Accepted differences stay visible
 // and are marked with their exception id (ADR 0007).
 func RunTable(w io.Writer, report model.RunReport, options Options) error {
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
 	coverage := report.Coverage
-	if _, err := fmt.Fprintf(tw, "VERDICT\t%s\n", report.Verdict); err != nil {
+	if err := writeRow(tw, "VERDICT", string(report.Verdict)); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(tw, "COVERAGE\tplanned=%d executed=%d equivalent=%d different=%d inconclusive=%d skipped=%d\n",
-		coverage.Planned, coverage.Executed, coverage.Equivalent, coverage.Different, coverage.Inconclusive, coverage.Skipped); err != nil {
+	if err := writeRow(tw, "COVERAGE", fmt.Sprintf("planned=%d executed=%d equivalent=%d different=%d inconclusive=%d skipped=%d",
+		coverage.Planned, coverage.Executed, coverage.Equivalent, coverage.Different, coverage.Inconclusive, coverage.Skipped)); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(tw, "BODY POLICY\t%s\n", report.BodyPolicy); err != nil {
+	if err := writeRow(tw, "BODY POLICY", report.BodyPolicy); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(tw, "REPEAT\t%d\n", report.Repeat); err != nil {
+	if err := writeRow(tw, "REPEAT", fmt.Sprintf("%d", report.Repeat)); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(tw, "EXCLUDED\t%d\n", report.Excluded); err != nil {
+	if err := writeRow(tw, "EXCLUDED", fmt.Sprintf("%d", report.Excluded)); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(tw, "UNSUPPORTED\t%d\n", report.UnsupportedCount); err != nil {
+	if err := writeRow(tw, "UNSUPPORTED", fmt.Sprintf("%d", report.UnsupportedCount)); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(tw, "EXPIRED EXCEPTIONS\t%s\n", orDash(report.ExpiredExceptions)); err != nil {
+	if err := writeRow(tw, "EXPIRED EXCEPTIONS", orDash(report.ExpiredExceptions)); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(tw, "IGNORED FIELDS\t%s\n", strings.Join(report.IgnoredFields, ", ")); err != nil {
+	if err := writeRow(tw, "IGNORED FIELDS", strings.Join(report.IgnoredFields, ", ")); err != nil {
 		return err
 	}
 	rows := reportableCases(report)
@@ -47,15 +51,15 @@ func RunTable(w io.Writer, report model.RunReport, options Options) error {
 		return err
 	}
 	if len(rows) != 0 {
-		if _, err := fmt.Fprintln(tw, "ID\tHOST\tMETHOD\tPATH\tFAMILY\tOUTCOME\tFIELD\tCODE\tOLD\tNEW\tNOTE"); err != nil {
+		if err := writeRow(tw, "ID", "HOST", "METHOD", "PATH", "FAMILY", "OUTCOME", "FIELD", "CODE", "OLD", "NEW", "NOTE"); err != nil {
 			return err
 		}
 	}
 	for _, evaluation := range rows {
 		if len(evaluation.Differences) == 0 {
-			if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			if err := writeRow(tw,
 				evaluation.CaseID, evaluation.Host, evaluation.Method, evaluation.Path, evaluation.Family,
-				evaluation.Outcome, "-", "-", "-", "-", runError(evaluation, options)); err != nil {
+				string(evaluation.Outcome), "-", "-", "-", "-", runError(evaluation, options)); err != nil {
 				return err
 			}
 			continue
@@ -63,15 +67,16 @@ func RunTable(w io.Writer, report model.RunReport, options Options) error {
 		for _, difference := range evaluation.Differences {
 			oldValue, newValue := displayValue(difference.Field, difference.Old, difference.New, options)
 			oldValue, newValue = shortenBody(difference.Field, oldValue), shortenBody(difference.Field, newValue)
-			if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			if err := writeRow(tw,
 				evaluation.CaseID, evaluation.Host, evaluation.Method, evaluation.Path, evaluation.Family,
-				evaluation.Outcome, difference.Field, difference.Code, oldValue, newValue, differenceNote(difference)); err != nil {
+				string(evaluation.Outcome), difference.Field, string(difference.Code), oldValue, newValue, differenceNote(difference)); err != nil {
 				return err
 			}
 		}
 		for _, explanation := range evaluation.Explanations {
-			if _, err := fmt.Fprintf(tw, "\t\t\t\t\t\t\t\t\t\twhy: %s  fix: %s  see: %s\n",
-				explanation.Summary, explanation.Fix, explanation.Source); err != nil {
+			cells := append(make([]string, explanationIndent, explanationIndent+1),
+				fmt.Sprintf("why: %s  fix: %s  see: %s", explanation.Summary, explanation.Fix, explanation.Source))
+			if err := writeRow(tw, cells...); err != nil {
 				return err
 			}
 		}
