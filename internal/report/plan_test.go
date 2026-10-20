@@ -3,6 +3,7 @@ package report
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
@@ -69,6 +70,80 @@ func TestPlanGolden(t *testing.T) {
 			}
 			golden(t, test.file, buf.Bytes())
 		})
+	}
+}
+
+// hostilePlan carries remote data with control bytes in every field a plan
+// table prints: a case path, a finding message, a finding annotation and a
+// warning message. The finding carries every byte class a remote server
+// could smuggle in: ESC, CR, LF, NUL, BEL, DEL, a C1 control and an invalid
+// UTF-8 byte.
+func hostilePlan() plan.Plan {
+	return plan.Plan{
+		Cases: []plan.Case{
+			{
+				ID: "0123456789ab", Host: "api.example.com", Scheme: plan.SchemeHTTPS,
+				Method: plan.MethodGet, Path: "/health\x1b[31m", Family: plan.FamilyBase,
+			},
+		},
+		Unsupported: []plan.Finding{
+			{
+				Code: diag.CodePlanAnnotationNotTestable, Ingress: "prod/checkout",
+				Annotation: "nginx.ingress.kubernetes.io/proxy-body-size\x00",
+				Message:    "annotation cannot be tested\x1b[31m\r\n\x00\x07\x7f\u009b\xff end",
+			},
+		},
+		Warnings: []plan.Warning{
+			{
+				Code: diag.CodePlanWildcardHost, Ingress: "prod/checkout",
+				Message: "wildcard host is planned as \u009bvarco-probe.example.com\n",
+			},
+		},
+	}
+}
+
+// Source: docs/adr/0006-redaction.md: the report layer is the only place that
+// serializes what a remote server sent, so it is the layer that keeps a
+// hostile response out of the operator's terminal. A finding message, an
+// annotation value read with --from-cluster or a warning detail must not be
+// able to write ANSI sequences or rewrite a line of the plan table.
+func TestPlanTableEscapesControlCharacters(t *testing.T) {
+	var buffer bytes.Buffer
+	if err := PlanTable(&buffer, hostilePlan()); err != nil {
+		t.Fatal(err)
+	}
+	table := buffer.String()
+	assertNoControlBytes(t, "plan table", table)
+	for _, want := range wantEscapes {
+		if !strings.Contains(table, want) {
+			t.Fatalf("plan table does not show the escape %s:\n%s", want, table)
+		}
+	}
+}
+
+// failAfterWriter writes until the given number of writes have succeeded, and
+// fails every write after that.
+type failAfterWriter struct {
+	remaining int
+}
+
+func (w *failAfterWriter) Write(payload []byte) (int, error) {
+	if w.remaining <= 0 {
+		return 0, os.ErrClosed
+	}
+	w.remaining--
+	return len(payload), nil
+}
+
+// Source: internal/report/plan.go PlanTable; a table that cannot be written is
+// an error the CLI turns into exit code 4 (docs/exit-codes.md), whichever row
+// the write fails on.
+func TestPlanTableReportsWriteErrors(t *testing.T) {
+	for failures := 0; failures < 12; failures++ {
+		writer := &failAfterWriter{remaining: failures}
+		if err := PlanTable(writer, fixture()); err == nil {
+			t.Fatalf("PlanTable() with %d failed writes = nil error, want the write error", failures)
+		}
 	}
 }
 

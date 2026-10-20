@@ -101,17 +101,30 @@ func Parse(r io.Reader) ([]Ingress, error) {
 			return resources, nil
 		}
 		if err != nil {
-			return nil, manifestError("document %d: %v", index, err)
+			return nil, documentError(index, err)
 		}
 		if err := validateDocument(document); err != nil {
-			return nil, fmt.Errorf("document %d: %w", index, err)
+			return nil, documentError(index, err)
 		}
 		found, err := parseRoot(document)
 		if err != nil {
-			return nil, fmt.Errorf("document %d: %w", index, err)
+			return nil, documentError(index, err)
 		}
 		resources = append(resources, found...)
 	}
+}
+
+// documentError names the document a manifest failure comes from. The
+// diagnostic code stays first, so every manifest failure reads the same way:
+// VAR-PLAN-0003: document 1: ...
+func documentError(index int, err error) error {
+	var diagnostic *diag.Error
+	if errors.As(err, &diagnostic) {
+		prefixed := diagnostic.Diagnostic
+		prefixed.Message = fmt.Sprintf("document %d: %s", index, prefixed.Message)
+		return &diag.Error{Diagnostic: prefixed, Cause: err}
+	}
+	return manifestError("document %d: %v", index, err)
 }
 
 // validateDocument bounds every YAML node kind before typed decoding. The
