@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/HarnageaGabriel/varco/internal/diag"
 )
 
 // failingWriter fails every write. It stands in for a stdout or a report file
@@ -87,6 +89,31 @@ func TestRunDiffSendsAcceptedRequestHeader(t *testing.T) {
 	}
 	if got, _ := seen.Load().(string); got != "1" {
 		t.Fatalf("X-Trace header = %q, want %q", got, "1")
+	}
+}
+
+// Source: internal/cli/cli.go diagFailure; a registered code prints its
+// diagnostic, and the caller keeps the exit code of its own failure.
+func TestDiagFailurePrintsTheRegisteredDiagnostic(t *testing.T) {
+	var stderr bytes.Buffer
+	if code := diagFailure(&stderr, diag.CodeInvalidFlag, "--profile must be nginx or generic"); code != 0 {
+		t.Fatalf("diagFailure() = %d, want 0; stderr = %q", code, stderr.String())
+	}
+	if want := "VAR-CFG-0001: --profile must be nginx or generic\n"; stderr.String() != want {
+		t.Fatalf("stderr = %q, want %q", stderr.String(), want)
+	}
+}
+
+// Source: internal/cli/cli.go diagFailure; a code the diagnostic registry
+// does not know prints the plain message and the caller must fail with the
+// internal error exit code 4 (docs/exit-codes.md).
+func TestDiagFailureFallsBackToTheInternalErrorPath(t *testing.T) {
+	var stderr bytes.Buffer
+	if code := diagFailure(&stderr, diag.Code("VAR-NOT-REGISTERED"), "plain message"); code != 4 {
+		t.Fatalf("diagFailure() = %d, want 4; stderr = %q", code, stderr.String())
+	}
+	if want := "plain message\n"; stderr.String() != want {
+		t.Fatalf("stderr = %q, want %q", stderr.String(), want)
 	}
 }
 

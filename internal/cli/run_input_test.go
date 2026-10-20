@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/HarnageaGabriel/varco/internal/diag"
 	"github.com/HarnageaGabriel/varco/internal/ingress"
 	"github.com/HarnageaGabriel/varco/internal/plan"
 )
@@ -39,6 +41,21 @@ func TestRunRejectsOversizedPlanInput(t *testing.T) {
 	}
 	if stdout != "" {
 		t.Fatalf("stdout = %q, want nothing", stdout)
+	}
+}
+
+// TestRunReportsOversizedPlanWithItsFullDiagnostic locks the whole message
+// of the plan failure: the VAR-PLAN-0003 code, the plan path, and the
+// reason, in that order.
+func TestRunReportsOversizedPlanWithItsFullDiagnostic(t *testing.T) {
+	oversized := strings.Repeat("a", ingress.MaxInputBytes+1)
+	code, stdout, stderr := runCLI(t, oversized, dryRunArgs("-")...)
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2; stdout = %q", code, stdout)
+	}
+	want := fmt.Sprintf("VAR-PLAN-0003: -: plan is larger than the %d-byte limit varco reads\n", ingress.MaxInputBytes)
+	if stderr != want {
+		t.Fatalf("stderr = %q, want %q", stderr, want)
 	}
 }
 
@@ -179,6 +196,69 @@ func TestRunRejectsInvalidPlanCases(t *testing.T) {
 				t.Fatalf("stdout = %q, want nothing", stdout)
 			}
 		})
+	}
+}
+
+// TestRunRejectsInvalidPlanFindingsAndWarnings covers the plan validation of
+// the free text an unsupported finding or a warning carries: a control byte
+// in a field the report prints is refused, and the error names the index and
+// the field without echoing the value.
+func TestRunRejectsInvalidPlanFindingsAndWarnings(t *testing.T) {
+	tests := []struct {
+		name      string
+		findings  []plan.Finding
+		warnings  []plan.Warning
+		wantField string
+		marker    string
+	}{
+		{name: "finding code with ESC", findings: []plan.Finding{{Code: "VAR-PLAN-0005\x1b"}}, wantField: "code", marker: "\x1b"},
+		{name: "finding ingress with CRLF", findings: []plan.Finding{{Code: diag.CodePlanRuleWithoutHost, Ingress: "dev/internal\r\nX-Injected: 1"}}, wantField: "ingress", marker: "X-Injected"},
+		{name: "finding annotation with ESC", findings: []plan.Finding{{Code: diag.CodePlanAnnotationNotTestable, Annotation: "nginx.ingress.kubernetes.io/proxy-body-size\x1b"}}, wantField: "annotation", marker: "\x1b"},
+		{name: "finding path with CRLF", findings: []plan.Finding{{Code: diag.CodePlanRegexSample, Path: "/a\r\nX-Injected: 1"}}, wantField: "path", marker: "X-Injected"},
+		{name: "finding message with ESC", findings: []plan.Finding{{Code: diag.CodePlanRuleWithoutHost, Message: "rule has no host\x1b[31m"}}, wantField: "message", marker: "\x1b"},
+		{name: "warning code with DEL", warnings: []plan.Warning{{Code: "VAR-PLAN-0005\x7f"}}, wantField: "code", marker: "\x7f"},
+		{name: "warning ingress with CRLF", warnings: []plan.Warning{{Code: diag.CodePlanWildcardHost, Ingress: "dev/internal\r\nX-Injected: 1"}}, wantField: "ingress", marker: "X-Injected"},
+		{name: "warning message with ESC", warnings: []plan.Warning{{Code: diag.CodePlanWildcardHost, Message: "wildcard host\x1b[31m"}}, wantField: "message", marker: "\x1b"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			document := planDocumentJSON(t, test.findings, test.warnings)
+			code, stdout, stderr := runCLI(t, document, dryRunArgs("-")...)
+			if code != 2 {
+				t.Fatalf("exit code = %d, want 2; stdout = %q", code, stdout)
+			}
+			if !strings.Contains(stderr, "VAR-CFG-0001") {
+				t.Fatalf("stderr = %q, want a VAR-CFG-0001 diagnostic", stderr)
+			}
+			if !strings.Contains(stderr, "index 0") {
+				t.Fatalf("stderr = %q, want the finding index", stderr)
+			}
+			if !strings.Contains(stderr, "invalid "+test.wantField) {
+				t.Fatalf("stderr = %q, want the %s field", stderr, test.wantField)
+			}
+			if strings.Contains(stderr, test.marker) {
+				t.Fatalf("stderr = %q, want no echo of the invalid value", stderr)
+			}
+			if stdout != "" {
+				t.Fatalf("stdout = %q, want nothing", stdout)
+			}
+		})
+	}
+}
+
+// TestRunAcceptsPlanFindingsAndWarnings covers the other side of the plan
+// validation: the findings and warnings varco writes itself still load.
+func TestRunAcceptsPlanFindingsAndWarnings(t *testing.T) {
+	document := planDocumentJSON(t,
+		[]plan.Finding{{Code: diag.CodePlanRuleWithoutHost, Ingress: "dev/internal", Message: "rule has no host"}},
+		[]plan.Warning{{Code: diag.CodePlanWildcardHost, Ingress: "dev/internal", Message: `wildcard host "*.one.example.com" is planned as "varco-probe.one.example.com"`}},
+	)
+	code, stdout, stderr := runCLI(t, document, dryRunArgs("-")...)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stdout = %q stderr = %q", code, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "TOTAL 0") {
+		t.Fatalf("stdout = %q, want a dry-run summary", stdout)
 	}
 }
 

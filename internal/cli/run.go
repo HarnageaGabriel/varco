@@ -142,8 +142,10 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	probeCases, excluded := engine.FilterCases(model.FromPlanCases(manifest.Cases), families, excludePaths)
 	for _, item := range probeCases {
 		if !runMethods[strings.ToUpper(item.Method)] {
-			diagnostic, _ := diag.New(diag.CodeUnsupportedMethod, fmt.Sprintf("case %s uses method %s", item.ID, item.Method))
-			_, _ = fmt.Fprintf(stderr, "%s: %s\n", diagnostic.Code, diagnostic.Message)
+			message := fmt.Sprintf("case %s uses method %s", item.ID, item.Method)
+			if code := diagFailure(stderr, diag.CodeUnsupportedMethod, message); code != 0 {
+				return code
+			}
 			return 2
 		}
 	}
@@ -233,15 +235,30 @@ func sortWarnings(warnings []plan.Warning) {
 	sort.Slice(warnings, func(i, j int) bool { return warningLess(warnings[i], warnings[j]) })
 }
 
+// outputFile is a file the CLI writes to and then closes. The interface lets
+// a test substitute a file whose Close fails.
+type outputFile interface {
+	io.Writer
+	Close() error
+}
+
+// openOutputFile opens the file the CLI writes to, with the given creation
+// flags and permissions. It is a variable so a test can replace it with a
+// file whose Close fails.
+var openOutputFile = func(path string, openFlags int, perm os.FileMode) (outputFile, error) {
+	return os.OpenFile(path, openFlags, perm) //nolint:gosec // the path is the file the user named
+}
+
 // writeSuggestions writes an exceptions file for every field the run observed
-// unstable. It never overwrites an existing file (exit code 2).
+// unstable. It never overwrites an existing file (exit code 2). A file that
+// cannot be flushed is an error, not a written file (exit code 4).
 func writeSuggestions(output string, runReport model.RunReport, repeat int, now time.Time, stderr io.Writer) int {
 	data, err := policy.RenderSuggestions(runReport.Unstable, repeat, now)
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, "suggest-exceptions:", err)
 		return 4
 	}
-	file, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // the path is the file the user named
+	file, err := openOutputFile(output, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if errors.Is(err, os.ErrExist) {
 		return configFailure(stderr, fmt.Sprintf("--suggest-exceptions: %s already exists; varco never overwrites it", output))
 	}
@@ -249,8 +266,9 @@ func writeSuggestions(output string, runReport model.RunReport, repeat int, now 
 		_, _ = fmt.Fprintln(stderr, "suggest-exceptions:", err)
 		return 4
 	}
-	defer func() { _ = file.Close() }()
-	if _, err := file.Write(data); err != nil {
+	_, writeErr := file.Write(data)
+	closeErr := file.Close()
+	if err := errors.Join(writeErr, closeErr); err != nil {
 		_, _ = fmt.Fprintln(stderr, "suggest-exceptions:", err)
 		return 4
 	}
@@ -284,6 +302,16 @@ func loadRunPlan(planPath string, inputs stringsFlag, stdin io.Reader, options p
 		for index, item := range document.Cases {
 			if reason := planCaseProblem(item); reason != "" {
 				return plan.Plan{}, configFailure(stderr, fmt.Sprintf("plan case at index %d has an invalid %s", index, reason))
+			}
+		}
+		for index, item := range document.Unsupported {
+			if reason := planFindingProblem(item); reason != "" {
+				return plan.Plan{}, configFailure(stderr, fmt.Sprintf("plan finding at index %d has an invalid %s", index, reason))
+			}
+		}
+		for index, item := range document.Warnings {
+			if reason := planWarningProblem(item); reason != "" {
+				return plan.Plan{}, configFailure(stderr, fmt.Sprintf("plan warning at index %d has an invalid %s", index, reason))
 			}
 		}
 		return plan.Plan{Profile: document.Profile, Cases: document.Cases, Unsupported: document.Unsupported, Warnings: document.Warnings}, 0
@@ -350,6 +378,45 @@ func planHeadersProblem(headers []plan.Header) string {
 	return ""
 }
 
+// planFindingProblem reports why an unsupported finding of a plan document
+// cannot be reported as written, or "" when the finding is safe to print.
+// The reason names the offending field and never repeats its value, so an
+// untrusted plan cannot smuggle bytes into a terminal through the error
+// message.
+func planFindingProblem(item plan.Finding) string {
+	if !validPlanText(string(item.Code)) {
+		return "code"
+	}
+	if !validPlanText(item.Ingress) {
+		return "ingress"
+	}
+	if !validPlanText(item.Annotation) {
+		return "annotation"
+	}
+	if !validPlanText(item.Path) {
+		return "path"
+	}
+	if !validPlanText(item.Message) {
+		return "message"
+	}
+	return ""
+}
+
+// planWarningProblem reports why a warning of a plan document cannot be
+// reported as written, or "" when the warning is safe to print.
+func planWarningProblem(item plan.Warning) string {
+	if !validPlanText(string(item.Code)) {
+		return "code"
+	}
+	if !validPlanText(item.Ingress) {
+		return "ingress"
+	}
+	if !validPlanText(item.Message) {
+		return "message"
+	}
+	return ""
+}
+
 // validPlanText reports whether a plan text field carries no control byte:
 // CR, LF, ESC and DEL are all rejected, so the field cannot rewrite a
 // terminal line.
@@ -365,8 +432,9 @@ func validPlanText(value string) bool {
 // planFailure prints a VAR-PLAN-0003 diagnostic for a plan document the CLI
 // cannot use and returns the usage exit code.
 func planFailure(stderr io.Writer, path string, message string) int {
-	diagnostic, _ := diag.New(diag.CodePlanManifest, message)
-	_, _ = fmt.Fprintf(stderr, "%s: %s: %s\n", diagnostic.Code, path, diagnostic.Message)
+	if code := diagFailure(stderr, diag.CodePlanManifest, path+": "+message); code != 0 {
+		return code
+	}
 	return 2
 }
 
@@ -461,17 +529,24 @@ func exceptionsTooLarge() error {
 	return &diag.Error{Diagnostic: diagnostic}
 }
 
-// writeRunReport renders the report to --output, or to stdout when unset.
+// writeRunReport renders the report to --output, or to stdout when unset. A
+// report file that cannot be flushed is an error, so a report that fails
+// only at close is never reported as written.
 func writeRunReport(output, format string, runReport model.RunReport, options report.Options, stdout io.Writer) error {
-	writer := stdout
-	if output != "" {
-		file, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) //nolint:gosec // the path is the output file the user named
-		if err != nil {
-			return err
-		}
-		defer func() { _ = file.Close() }()
-		writer = file
+	if output == "" {
+		return writeRunReportTo(format, runReport, options, stdout)
 	}
+	file, err := openOutputFile(output, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	writeErr := writeRunReportTo(format, runReport, options, file)
+	closeErr := file.Close()
+	return errors.Join(writeErr, closeErr)
+}
+
+// writeRunReportTo renders the run report in the requested format.
+func writeRunReportTo(format string, runReport model.RunReport, options report.Options, writer io.Writer) error {
 	if format == "json" {
 		return report.RunJSON(writer, runReport, options)
 	}

@@ -154,8 +154,9 @@ func runDiff(args []string, stdout, stderr io.Writer) int {
 			_, _ = fmt.Fprintln(stderr, diagnosticError.Error())
 			return 2
 		}
-		diagnostic, _ := diag.New(diag.CodeEndpointUnreachable, err.Error())
-		_, _ = fmt.Fprintf(stderr, "%s: %s\n", diagnostic.Code, diagnostic.Message)
+		if code := diagFailure(stderr, diag.CodeEndpointUnreachable, err.Error()); code != 0 {
+			return code
+		}
 		return 3
 	}
 	if *format == "json" {
@@ -168,8 +169,10 @@ func runDiff(args []string, stdout, stderr io.Writer) int {
 		return 4
 	}
 	for _, failure := range outcome.Failures {
-		diagnostic, _ := diag.New(diag.CodeEndpointUnreachable, fmt.Sprintf("path of length %d via %s: %v", len(failure.Path), failure.Endpoint, failure.Err))
-		_, _ = fmt.Fprintf(stderr, "%s: %s\n", diagnostic.Code, diagnostic.Message)
+		message := fmt.Sprintf("path of length %d via %s: %v", len(failure.Path), failure.Endpoint, failure.Err)
+		if code := diagFailure(stderr, diag.CodeEndpointUnreachable, message); code != 0 {
+			return code
+		}
 	}
 	if len(outcome.Differences) != 0 {
 		return 1
@@ -215,9 +218,25 @@ func parseHeaders(values []string) ([]result.Header, error) {
 	return headers, nil
 }
 
-func configFailure(stderr io.Writer, message string) int {
-	diagnostic, _ := diag.New(diag.CodeInvalidFlag, message)
+// diagFailure prints the diagnostic for code and message. It returns 0 when
+// the diagnostic was printed, and the internal error exit code 4 when the
+// diagnostic registry does not know the code: the plain message is printed
+// instead of a zero diagnostic, and the caller must fail with that code
+// (docs/exit-codes.md).
+func diagFailure(stderr io.Writer, code diag.Code, message string) int {
+	diagnostic, err := diag.New(code, message)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, message)
+		return 4
+	}
 	_, _ = fmt.Fprintf(stderr, "%s: %s\n", diagnostic.Code, diagnostic.Message)
+	return 0
+}
+
+func configFailure(stderr io.Writer, message string) int {
+	if code := diagFailure(stderr, diag.CodeInvalidFlag, message); code != 0 {
+		return code
+	}
 	return 2
 }
 
