@@ -156,7 +156,7 @@ the Kubernetes post [Five Surprising Ingress-NGINX Behaviors](https://kubernetes
 | `cors-preflight` | The `OPTIONS` preflight when `enable-cors` is set |
 | `rewrite`, `app-root`, `redirect-annotation` | `rewrite-target`, `app-root`, `permanent-redirect` and `temporal-redirect` |
 | `default-backend`, `unmatched-route` | The controller's default backend and a request no rule catches (synthetic plan-wide cases) |
-| `head`, `host-variant` | HEAD handling (RFC 9110 section 9.3.2) and host matching (RFC 3986 section 3.2.2, RFC 9110 section 7.2): one `HEAD` request and three `Host` header variants (upper-cased, trailing dot, explicit default port with SNI kept plain) per concrete host on its first planned path (synthetic plan-wide cases) |
+| `head`, `host-variant` | HEAD handling (RFC 9110 section 9.3.2) and host matching (RFC 3986 section 3.2.2, RFC 9110 section 7.2): one `HEAD` request and three `Host` header variants (upper-cased, trailing dot, explicit default port with SNI kept plain) per concrete host on the smallest planned path of that host (the lexicographically smallest planned request path, so the plan does not depend on the order of the input) (synthetic plan-wide cases) |
 
 Annotations that cannot be tested from outside, such as timeouts or backend
 protocol, are reported as findings. See [plan.md](docs/plan.md).
