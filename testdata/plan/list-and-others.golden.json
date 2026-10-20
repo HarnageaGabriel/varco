@@ -126,7 +126,7 @@
       "note": "ingress-nginx answers plain HTTP with a redirect to HTTPS when TLS or ssl-redirect is configured for the host"
     },
     {
-      "id": "c2f82c5e5321",
+      "id": "e7e0ff24fa39",
       "host": "status.example.com",
       "scheme": "http",
       "method": "HEAD",
@@ -137,7 +137,7 @@
         "rule": 0,
         "path": 0
       },
-      "note": "HEAD on the first planned path; the comparison shows only whether old and new handle HEAD equivalently (RFC 9110 section 9.3.2)"
+      "note": "HEAD on the smallest planned path of the host; the comparison shows only whether old and new handle HEAD equivalently (RFC 9110 section 9.3.2)"
     },
     {
       "id": "596481c9b632",
