@@ -187,7 +187,7 @@
       "note": "the trailing dot is the fully-qualified form of the host; SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
     },
     {
-      "id": "b910f9ba1220",
+      "id": "9069e0f331f9",
       "host": "api.example.com",
       "sni": "api.example.com",
       "scheme": "https",
@@ -199,7 +199,7 @@
         "rule": 0,
         "path": 0
       },
-      "note": "HEAD on the first planned path; the comparison shows only whether old and new handle HEAD equivalently (RFC 9110 section 9.3.2)"
+      "note": "HEAD on the smallest planned path of the host; the comparison shows only whether old and new handle HEAD equivalently (RFC 9110 section 9.3.2)"
     },
     {
       "id": "fb2d61f3da63",

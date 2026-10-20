@@ -338,7 +338,7 @@
       "note": "the Host header may carry the port (RFC 9110 section 7.2), and this is its explicit default; SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
     },
     {
-      "id": "70e9550b1b1b",
+      "id": "98d90272855e",
       "host": "api.example.com",
       "sni": "api.example.com",
       "scheme": "https",
@@ -350,7 +350,7 @@
         "rule": 0,
         "path": 0
       },
-      "note": "HEAD on the first planned path; the comparison shows only whether old and new handle HEAD equivalently (RFC 9110 section 9.3.2)"
+      "note": "HEAD on the smallest planned path of the host; the comparison shows only whether old and new handle HEAD equivalently (RFC 9110 section 9.3.2)"
     },
     {
       "id": "2154dab9afba",
