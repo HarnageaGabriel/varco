@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("api.example.com\x1b[31m\r\n\x00\x07\x1f/cb\t\x1b]0;title\x07\x1fcase-1\u202e\u200b\x1fbase\x1ftext/plain\xff\x1fapplication/json\u009b\x1f/cb?code=old-secret\x1b[31m\x1f/cb?code=new-secret\x1fVAR-NET-0001: probe refused\r\n\x1fCN=old\xfe\x1fCN=new\x1fsession\x00\x1f\U0001F389 explanation\u202e\x1ftimeouts are not observable\x1b[2J\x1fserver-header\x1fcontent-length")
