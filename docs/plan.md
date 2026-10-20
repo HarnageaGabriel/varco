@@ -54,6 +54,13 @@ source, note), so an ID is stable across runs and independent of generation
 order. No output order depends on map iteration, and no case carries a clock, a
 credential header or a method other than `GET`, `HEAD` or `OPTIONS`.
 
+The JSON envelope is published as a JSON Schema:
+[plan.schema.json](schema/plan.schema.json). It names every field, its type
+and the closed lists of values, so any standard JSON Schema validator can
+check an output. The envelope accepts an unknown top-level field, because a
+new top-level field is an additive change that keeps `schema_version` at `1`;
+see [docs/schema](schema/) for the compatibility promise.
+
 ## Profiles
 
 The planner has two selectable profiles, recorded as `profile` in JSON:

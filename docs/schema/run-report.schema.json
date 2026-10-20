@@ -1,0 +1,277 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/HarnageaGabriel/varco/tree/main/docs/schema/run-report.schema.json",
+  "title": "varco run report JSON",
+  "description": "The machine-readable report written by `varco run --format json`. The envelope is versioned by schema_version; additive changes keep it at 1.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "verdict",
+    "coverage",
+    "unsupported_count",
+    "unsupported",
+    "expired_exceptions",
+    "ignored_fields",
+    "cases"
+  ],
+  "properties": {
+    "schema_version": {
+      "description": "The version of the document shape. Always 1: an additive change does not bump it.",
+      "type": "integer",
+      "const": 1
+    },
+    "verdict": {
+      "description": "The aggregate outcome of the run (ADR 0007).",
+      "type": "string",
+      "enum": [
+        "EQUIVALENT",
+        "DIFFERENT",
+        "INCONCLUSIVE"
+      ]
+    },
+    "coverage": {
+      "$ref": "#/$defs/coverage"
+    },
+    "repeat": {
+      "description": "The --repeat value this run used. An additive field, so a consumer must accept a document without it.",
+      "type": "integer"
+    },
+    "body_policy": {
+      "description": "The --body policy in force. An additive field, so a consumer must accept a document without it.",
+      "type": "string",
+      "enum": [
+        "2xx",
+        "hash",
+        "none"
+      ]
+    },
+    "excluded": {
+      "description": "The cases removed by --family or --exclude-path before the run. An additive field, so a consumer must accept a document without it.",
+      "type": "integer"
+    },
+    "unsupported_count": {
+      "description": "The number of unsupported findings in the plan.",
+      "type": "integer"
+    },
+    "unsupported": {
+      "description": "The unsupported findings of the plan.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "expired_exceptions": {
+      "description": "The ids of the exceptions that are past their expires date.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ignored_fields": {
+      "description": "The fields left out of every comparison, reported so nothing is invisible.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "cases": {
+      "description": "One evaluation per case, in plan order.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/evaluation"
+      }
+    },
+    "redacted": {
+      "description": "True unless --show-sensitive was used. An additive field, so a consumer must accept a document without it.",
+      "type": "boolean"
+    }
+  },
+  "$defs": {
+    "coverage": {
+      "description": "How much of the plan the run observed (ADR 0007).",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "planned",
+        "executed",
+        "equivalent",
+        "different",
+        "inconclusive",
+        "skipped"
+      ],
+      "properties": {
+        "planned": {
+          "description": "The number of cases in the plan.",
+          "type": "integer"
+        },
+        "executed": {
+          "description": "The number of cases the run observed, planned minus skipped.",
+          "type": "integer"
+        },
+        "equivalent": {
+          "description": "The number of equivalent cases.",
+          "type": "integer"
+        },
+        "different": {
+          "description": "The number of different cases.",
+          "type": "integer"
+        },
+        "inconclusive": {
+          "description": "The number of inconclusive cases.",
+          "type": "integer"
+        },
+        "skipped": {
+          "description": "The number of cases the run did not observe.",
+          "type": "integer"
+        }
+      }
+    },
+    "evaluation": {
+      "description": "The complete result of one executed case.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "case_id",
+        "outcome",
+        "differences"
+      ],
+      "properties": {
+        "case_id": {
+          "description": "The id of the case in the plan.",
+          "type": "string"
+        },
+        "outcome": {
+          "description": "The outcome of the case (ADR 0007).",
+          "type": "string",
+          "enum": [
+            "EQUIVALENT",
+            "DIFFERENT",
+            "INCONCLUSIVE"
+          ]
+        },
+        "differences": {
+          "description": "Every observed difference, accepted ones included.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/difference"
+          }
+        },
+        "explanations": {
+          "description": "The known migration behaviors that explain the differences. An additive field, so a consumer must accept a document without it.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/explanation"
+          }
+        },
+        "error": {
+          "description": "Why the case could not be observed.",
+          "type": "string"
+        }
+      }
+    },
+    "difference": {
+      "description": "One observed mismatch and the policy decision about it.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "code",
+        "field",
+        "old",
+        "new",
+        "accepted"
+      ],
+      "properties": {
+        "code": {
+          "description": "The stable diagnostic code, for example VAR-CMP-0001.",
+          "type": "string"
+        },
+        "field": {
+          "description": "The compared field, for example status or header.location.",
+          "type": "string"
+        },
+        "old": {
+          "description": "The value observed on the old endpoint, redacted unless --show-sensitive was used.",
+          "type": "string"
+        },
+        "new": {
+          "description": "The value observed on the new endpoint, redacted unless --show-sensitive was used.",
+          "type": "string"
+        },
+        "accepted": {
+          "description": "True when policy accepted the difference.",
+          "type": "boolean"
+        },
+        "reason": {
+          "description": "Why policy accepted the difference.",
+          "type": "string"
+        },
+        "exception_id": {
+          "description": "The exception that accepted the difference.",
+          "type": "string"
+        }
+      }
+    },
+    "explanation": {
+      "description": "A known migration behavior that can explain a difference.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "summary",
+        "fix",
+        "source"
+      ],
+      "properties": {
+        "id": {
+          "description": "The rule id of the explanation.",
+          "type": "string"
+        },
+        "summary": {
+          "description": "What the behavior is.",
+          "type": "string"
+        },
+        "fix": {
+          "description": "What to do about it.",
+          "type": "string"
+        },
+        "source": {
+          "description": "Where the behavior is documented.",
+          "type": "string"
+        }
+      }
+    },
+    "finding": {
+      "description": "Something varco could not plan or test, with the reason why.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "code",
+        "ingress",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "description": "The stable diagnostic code, for example VAR-PLAN-0001.",
+          "type": "string"
+        },
+        "ingress": {
+          "description": "The Ingress the finding refers to.",
+          "type": "string"
+        },
+        "annotation": {
+          "description": "The annotation the finding refers to.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The path the finding refers to.",
+          "type": "string"
+        },
+        "message": {
+          "description": "What varco could not do, and why.",
+          "type": "string"
+        }
+      }
+    }
+  }
+}

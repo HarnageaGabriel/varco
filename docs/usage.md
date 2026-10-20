@@ -8,6 +8,8 @@ All three read only what you pass them; nothing sends traffic without `diff` or 
 - **`varco plan`** derives the probe cases `run` would execute from Ingress manifests (`-f`, or a live cluster with `--from-cluster`) and lists what it cannot test. Sends nothing, contacts nothing (outside `kubectl get` with `--from-cluster`).
 - **`varco run`** executes a plan against the two endpoints and evaluates the observed differences through the policy layer with a verdict per [ADR 0007](adr/0007-verdict-model.md). Start with `--dry-run` to see the requests a run would send.
 
+A step-by-step cutover rehearsal, from two controllers side by side to a green CI run, is in [cookbook.md](cookbook.md).
+
 ## varco plan
 
 Reads Kubernetes Ingress manifests and prints the probe cases `varco run` will execute, plus what varco cannot test. Nothing is sent to the network and no cluster is contacted.
