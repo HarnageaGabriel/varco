@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -98,6 +100,62 @@ func TestRunFailsWhenOutputFileCannotBeCreated(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "report:") {
 		t.Fatalf("stderr = %q, want the report error", stderr.String())
+	}
+}
+
+// failingCloseFile is a file that accepts every write but fails to close. It
+// stands in for a report file that cannot be flushed, so the close path of a
+// command can be tested without touching the disk.
+type failingCloseFile struct {
+	io.Writer
+}
+
+func (failingCloseFile) Close() error { return errors.New("close failed") }
+
+// replaceOutputFile points the CLI at a file that fails to close, for the
+// duration of one test only.
+func replaceOutputFile(t *testing.T, file outputFile) {
+	t.Helper()
+	original := openOutputFile
+	openOutputFile = func(string, int, os.FileMode) (outputFile, error) {
+		return file, nil
+	}
+	t.Cleanup(func() { openOutputFile = original })
+}
+
+// Source: internal/cli/run.go writeRunReport; a report file that cannot be
+// flushed is an internal error (exit 4, docs/exit-codes.md).
+func TestRunFailsWhenReportFileCannotBeClosed(t *testing.T) {
+	server := statusServer(http.StatusOK)
+	defer server.Close()
+	address := server.Listener.Addr().String()
+	oneCase := planJSON(t, []plan.Case{{ID: "aaaaaaaaaaaa", Host: "app.example", Scheme: "http", Method: "GET", Path: "/", Family: "base"}})
+	replaceOutputFile(t, failingCloseFile{Writer: io.Discard})
+	var stdout, stderr bytes.Buffer
+	args := append(append([]string{}, runBase...), "--plan", "-", "--output", filepath.Join(t.TempDir(), "report.json"), "--old", address, "--new", address)
+	if code := Run(args, strings.NewReader(oneCase), &stdout, &stderr); code != 4 {
+		t.Fatalf("Run() = %d, want 4; stdout = %q stderr = %q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "report:") {
+		t.Fatalf("stderr = %q, want the report error", stderr.String())
+	}
+}
+
+// Source: internal/cli/run.go writeSuggestions; a suggested exceptions file
+// that cannot be flushed is an internal error (exit 4, docs/exit-codes.md).
+func TestRunFailsWhenSuggestionsFileCannotBeClosed(t *testing.T) {
+	server := statusServer(http.StatusOK)
+	defer server.Close()
+	address := server.Listener.Addr().String()
+	oneCase := planJSON(t, []plan.Case{{ID: "aaaaaaaaaaaa", Host: "app.example", Scheme: "http", Method: "GET", Path: "/", Family: "base"}})
+	replaceOutputFile(t, failingCloseFile{Writer: io.Discard})
+	var stdout, stderr bytes.Buffer
+	args := append(append([]string{}, runBase...), "--plan", "-", "--suggest-exceptions", filepath.Join(t.TempDir(), "exceptions.yaml"), "--old", address, "--new", address)
+	if code := Run(args, strings.NewReader(oneCase), &stdout, &stderr); code != 4 {
+		t.Fatalf("Run() = %d, want 4; stdout = %q stderr = %q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "suggest-exceptions:") {
+		t.Fatalf("stderr = %q, want the suggest-exceptions error", stderr.String())
 	}
 }
 

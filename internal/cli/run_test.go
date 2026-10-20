@@ -26,6 +26,18 @@ func planJSON(t *testing.T, cases []plan.Case) string {
 	return string(data)
 }
 
+// planDocumentJSON encodes a plan document that carries the given findings
+// and warnings, so a test can hand the loader untrusted free text.
+func planDocumentJSON(t *testing.T, findings []plan.Finding, warnings []plan.Warning) string {
+	t.Helper()
+	document := report.PlanDocument{SchemaVersion: 1, Cases: []plan.Case{}, Unsupported: findings, Warnings: warnings}
+	data, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
 func statusServer(status int) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(status)
