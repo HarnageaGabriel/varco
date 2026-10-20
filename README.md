@@ -271,6 +271,7 @@ where the test cases come from.
 - [Troubleshooting](docs/troubleshooting.md)
 - [Exit codes](docs/exit-codes.md)
 - [Diagnostic codes](docs/diagnostics/README.md)
+- [Architecture](docs/architecture.md)
 - [Architecture decisions](docs/adr)
 - [Maintainers](docs/maintainers.md)
 - [Release process](docs/release-process.md)
