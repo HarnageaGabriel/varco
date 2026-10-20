@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
-	"math"
 	"math/rand"
 	"path/filepath"
 	"reflect"
@@ -28,20 +27,19 @@ import (
 // hex(sha256(canonical case))[:12] as id, are de-duplicated by that ID, and
 // are sorted by (host, path, scheme, method, family, id)").
 //
-// Exactly two parts of the output depend on the order of the input resources,
-// and both are documented:
-//  1. the head and host-variant cases use "that host's first planned path"
-//     (docs/plan.md, "Case families"; ADR 0005): internal/plan/generate.go
-//     records the first request emitted for a host in builder.firstPaths
-//     (addPath -> emit), so the path, and with it the case id, depends on the
-//     input order;
-//  2. the VAR-PLAN-0006 warning names the Ingress that turned host-wide regex
-//     matching on (internal/plan/nginx.go, markRegexHost). The corpora below
-//     keep at most one resource per host carrying use-regex or rewrite-target,
-//     so this warning never moves.
+// Two parts of the output used to depend on the order of the input resources.
+// Both are chosen by a stable rule now, so the whole plan is byte-identical
+// in every input order:
+//  1. the head and host-variant cases use the smallest planned path of their
+//     host: internal/plan/generate.go collects the planned request targets per
+//     host (builder.plannedPaths) and picks the lexicographically smallest one
+//     after every resource is processed;
+//  2. the VAR-PLAN-0006 warning names the Ingress with the smallest namespace
+//     and name among those that turned host-wide regex matching on
+//     (internal/plan/nginx.go, markRegexHost and addRegexHostWarnings).
 //
-// Everything else - the remaining cases, the findings and the warnings - is
-// identical whatever order the resources arrive in.
+// Everything else - the remaining cases, the findings and the warnings - was
+// already identical whatever order the resources arrived in.
 
 const (
 	// determinismSeed is the fixed seed of the shuffle generator, so a failing
@@ -72,11 +70,6 @@ type determinismCorpus struct {
 	name string
 	// resources are the parsed Ingress resources of the corpus.
 	resources []ingress.Ingress
-	// sharedHost reports whether two resources of the corpus declare the same
-	// concrete host. That is the only situation in which the rendered plan may
-	// legitimately differ between two input orders, because the head and
-	// host-variant cases use the first planned path of the host.
-	sharedHost bool
 }
 
 // determinismProfiles are the two planner profiles every determinism test runs
@@ -139,15 +132,15 @@ func determinismCorpora(t *testing.T) []determinismCorpus {
 		if shared := hasSharedConcreteHost(resources); shared != wantShared {
 			t.Fatalf("corpus %s: shared concrete host = %v, want %v", manifest, shared, wantShared)
 		}
-		corpora = append(corpora, determinismCorpus{name: strings.ReplaceAll(manifest, "/", "-"), resources: resources, sharedHost: wantShared})
+		corpora = append(corpora, determinismCorpus{name: strings.ReplaceAll(manifest, "/", "-"), resources: resources})
 	}
 	if !hasSharedConcreteHost(combined) {
 		t.Fatal("the combined fixture corpus must declare a host twice")
 	}
 	corpora = append(corpora,
-		determinismCorpus{name: "fixtures-combined", resources: combined, sharedHost: true},
-		determinismCorpus{name: "synthetic-shared-hosts", resources: syntheticResources(true), sharedHost: true},
-		determinismCorpus{name: "synthetic-unique-hosts", resources: syntheticResources(false), sharedHost: false},
+		determinismCorpus{name: "fixtures-combined", resources: combined},
+		determinismCorpus{name: "synthetic-shared-hosts", resources: syntheticResources(true)},
+		determinismCorpus{name: "synthetic-unique-hosts", resources: syntheticResources(false)},
 	)
 	return corpora
 }
@@ -183,8 +176,8 @@ func concreteHosts(resources []ingress.Ingress) map[string]bool {
 }
 
 // hasSharedConcreteHost reports whether two resources of the corpus declare
-// the same concrete host, the only situation in which the plan may legitimately
-// differ between two input orders.
+// the same concrete host, the case in which the head and host-variant
+// families could depend on the order of the input.
 func hasSharedConcreteHost(resources []ingress.Ingress) bool {
 	seen := make(map[string]bool)
 	for _, resource := range resources {
@@ -211,8 +204,10 @@ func hasSharedConcreteHost(resources []ingress.Ingress) bool {
 // host and a rule without a host.
 //
 // At most one resource per host carries use-regex or rewrite-target, so the
-// VAR-PLAN-0006 warning of internal/plan/nginx.go markRegexHost always names
-// the same Ingress and never depends on the input order.
+// VAR-PLAN-0006 warning of internal/plan/nginx.go markRegexHost names one
+// Ingress per host. The warning names the smallest namespace and name among
+// the Ingresses that turn the scope on, so it does not depend on the input
+// order.
 func syntheticResources(sharedHosts bool) []ingress.Ingress {
 	resources := make([]ingress.Ingress, 0, syntheticResourceCount)
 	for index := 0; index < syntheticResourceCount; index++ {
@@ -309,22 +304,8 @@ func reversedResources(resources []ingress.Ingress) []ingress.Ingress {
 	return reversed
 }
 
-// orderIndependentCases returns the cases that do not depend on the order of
-// the input resources: every case whose family is neither head nor
-// host-variant (internal/plan/generate.go, addHostVariantAndHeadCases).
-func orderIndependentCases(cases []plan.Case) []plan.Case {
-	kept := make([]plan.Case, 0, len(cases))
-	for _, item := range cases {
-		if item.Family == plan.FamilyHead || item.Family == plan.FamilyHostVariant {
-			continue
-		}
-		kept = append(kept, item)
-	}
-	return kept
-}
-
-// hostScopedCases returns the two plan-wide families that depend on the order
-// of the input resources: the head case and the three host-variant cases of
+// hostScopedCases returns the two plan-wide families that carry the smallest
+// planned path of a host: the head case and the three host-variant cases of
 // every concrete host (ADR 0005, "Host-variant and head families").
 func hostScopedCases(result plan.Plan) []plan.Case {
 	kept := make([]plan.Case, 0, 8)
@@ -335,21 +316,6 @@ func hostScopedCases(result plan.Plan) []plan.Case {
 		kept = append(kept, item)
 	}
 	return kept
-}
-
-// projectedJSON renders the plan exactly like the CLI, with the two
-// order-sensitive families removed from the case list: the part of the plan
-// that must not move when the input resources are reordered.
-//
-// The rendering is the one of renderPlanJSON in golden_test.go, which mirrors
-// the CLI writer writePlanJSON in internal/cli/plan.go (same document struct,
-// same json.Encoder with SetIndent("", "  ")); internal/cli/plan_test.go
-// TestPlanJSONMatchesGolden proves the CLI emits exactly those bytes.
-func projectedJSON(t *testing.T, result plan.Plan) []byte {
-	t.Helper()
-	projected := result
-	projected.Cases = orderIndependentCases(result.Cases)
-	return renderPlan(t, projected)
 }
 
 // renderPlan renders a plan with the shared CLI-shaped writer and fails the
@@ -363,49 +329,28 @@ func renderPlan(t *testing.T, result plan.Plan) []byte {
 	return rendered
 }
 
-// firstPlannedPaths returns, for every host of the plan, the path the head and
-// host-variant cases must use: the base (or rewrite, or app-root) case of the
-// first resource in input order that declares the host.
+// smallestPlannedPaths returns, for every host of the plan, the path the head
+// and host-variant cases must use: the lexicographically smallest planned
+// request path of that host.
 //
-// The rule comes from docs/plan.md ("that host's first planned path") and ADR
-// 0005. internal/plan/generate.go sets builder.firstPaths[host] from the first
-// request emitted for that host, and emit is called for the paths of a
-// resource in rule and path order, after which the app-root case of the same
-// Ingress is emitted: the candidates of a resource are therefore ordered by
-// (rule index, path index), and the app-root case sorts last in its resource.
-//
-// The candidates are compared with a NUL separated key: the position of the
-// resource in the input order, then the rule and path index inside it, then
-// the request target, so the base request of a rewrite wins over the subpath
-// request of the same route. NUL cannot occur in a request target
-// (internal/plan/generate.go, validateCase).
-func firstPlannedPaths(t *testing.T, resources []ingress.Ingress, result plan.Plan) map[string]string {
-	t.Helper()
-	positions := make(map[string]int, len(resources))
-	for index, resource := range resources {
-		positions[resource.Key()] = index
-	}
-	bestKey := make(map[string]string)
-	bestPath := make(map[string]string)
+// The rule comes from docs/plan.md ("the smallest planned path of the host")
+// and ADR 0005. The planned request paths of a host are the targets of its
+// base and rewrite cases plus the "/" of its app-root case: the request a
+// route is planned on (internal/plan/generate.go, emit).
+func smallestPlannedPaths(result plan.Plan) map[string]string {
+	smallest := make(map[string]string)
 	for _, item := range result.Cases {
-		if item.Family != plan.FamilyBase && item.Family != plan.FamilyRewrite && item.Family != plan.FamilyAppRoot {
+		switch item.Family {
+		case plan.FamilyBase, plan.FamilyRewrite, plan.FamilyAppRoot:
+		default:
 			continue
 		}
-		position, ok := positions[item.Source.Ingress]
-		if !ok {
-			t.Fatalf("case %#v names the source %q, which is not one of the input resources", item, item.Source.Ingress)
-		}
-		rule, path := item.Source.Rule, item.Source.Path
-		if item.Family == plan.FamilyAppRoot {
-			rule, path = math.MaxInt, math.MaxInt
-		}
-		key := fmt.Sprintf("%020d\x00%020d\x00%020d\x00%s\x00%s", position, rule, path, item.Path, item.Family)
-		if current, seen := bestKey[item.Host]; !seen || key < current {
-			bestKey[item.Host] = key
-			bestPath[item.Host] = item.Path
+		current, seen := smallest[item.Host]
+		if !seen || item.Path < current {
+			smallest[item.Host] = item.Path
 		}
 	}
-	return bestPath
+	return smallest
 }
 
 // canonicalCase is the canonical form of a case, mirrored from
@@ -538,12 +483,12 @@ func firstDifference(a, b []byte) int {
 }
 
 // assertHostScopedCases checks the documented head and host-variant rule for
-// one input order: every concrete host that has a head case has exactly one
-// head case and exactly three host-variant cases, and all of them use the
-// first planned path of that host (docs/plan.md, "Case families"; ADR 0005).
-func assertHostScopedCases(t *testing.T, resources []ingress.Ingress, result plan.Plan) {
+// one plan: every concrete host that has a head case has exactly one head case
+// and exactly three host-variant cases, and all of them use the smallest
+// planned path of that host (docs/plan.md, "Case families"; ADR 0005).
+func assertHostScopedCases(t *testing.T, result plan.Plan) {
 	t.Helper()
-	first := firstPlannedPaths(t, resources, result)
+	smallest := smallestPlannedPaths(result)
 	byHost := make(map[string][]plan.Case)
 	for _, item := range hostScopedCases(result) {
 		byHost[item.Host] = append(byHost[item.Host], item)
@@ -557,12 +502,12 @@ func assertHostScopedCases(t *testing.T, resources []ingress.Ingress, result pla
 			case plan.FamilyHostVariant:
 				variants++
 			}
-			want, ok := first[host]
+			want, ok := smallest[host]
 			if !ok {
-				t.Fatalf("host %q has a head case but no first planned path", host)
+				t.Fatalf("host %q has a head case but no planned path", host)
 			}
 			if item.Path != want {
-				t.Fatalf("host %q: the %s case uses the path %q, want the first planned path %q", host, item.Family, item.Path, want)
+				t.Fatalf("host %q: the %s case uses the path %q, want the smallest planned path %q", host, item.Family, item.Path, want)
 			}
 		}
 		if heads != 1 {
@@ -572,69 +517,6 @@ func assertHostScopedCases(t *testing.T, resources []ingress.Ingress, result pla
 			t.Fatalf("host %q has %d host-variant cases, want exactly three", host, variants)
 		}
 	}
-}
-
-// assertOnlyHostScopedPathsChanged checks that every case outside the head and
-// host-variant families keeps its id and its path between two input orders.
-//
-// The head and host-variant cases are the only ones that may move, and they
-// move as a group: their id is the hash of the case, so a moved case gets a
-// new id (internal/plan/plan.go, caseID). Their number stays the same.
-func assertOnlyHostScopedPathsChanged(t *testing.T, first plan.Plan, second plan.Plan) {
-	t.Helper()
-	pathsOf := func(result plan.Plan) map[string]string {
-		paths := make(map[string]string)
-		for _, item := range orderIndependentCases(result.Cases) {
-			paths[item.ID] = item.Path
-		}
-		return paths
-	}
-	stable, moved := pathsOf(first), pathsOf(second)
-	if len(stable) != len(moved) {
-		t.Fatalf("the order-independent cases changed count: %d vs %d", len(stable), len(moved))
-	}
-	for id, path := range stable {
-		other, ok := moved[id]
-		if !ok {
-			t.Fatalf("case %s disappeared when the input order changed", id)
-		}
-		if other != path {
-			t.Fatalf("case %s changed its path from %q to %q when the input order changed", id, path, other)
-		}
-	}
-	if len(hostScopedCases(first)) != len(hostScopedCases(second)) {
-		t.Fatalf("the number of host-scoped cases changed: %d vs %d", len(hostScopedCases(first)), len(hostScopedCases(second)))
-	}
-}
-
-// assertSomeHostScopedPathMoved checks that two input orders really do produce
-// different head paths, so the documented order sensitivity is observed and
-// not merely allowed.
-func assertSomeHostScopedPathMoved(t *testing.T, first plan.Plan, second plan.Plan) {
-	t.Helper()
-	headPaths := func(result plan.Plan) map[string]string {
-		paths := make(map[string]string)
-		for _, item := range result.Cases {
-			if item.Family == plan.FamilyHead {
-				paths[item.Host] = item.Path
-			}
-		}
-		return paths
-	}
-	firstPaths, secondPaths := headPaths(first), headPaths(second)
-	if len(firstPaths) != len(secondPaths) {
-		t.Fatalf("the number of hosts with a head case changed: %d vs %d", len(firstPaths), len(secondPaths))
-	}
-	for host, path := range firstPaths {
-		other, ok := secondPaths[host]
-		if !ok {
-			t.Fatalf("host %q lost its head case when the input order changed", host)
-		}
-		if other != path {
-			return
-		}
-	}
-	t.Fatal("no head path moved when the input order changed, so the order sensitivity was not observed")
 }
 
 // TestPlanJSONIsIndependentOfInputOrder proves that the rendered plan does not
@@ -648,33 +530,23 @@ func assertSomeHostScopedPathMoved(t *testing.T, first plan.Plan, second plan.Pl
 // and internal/cli/plan_test.go TestPlanJSONMatchesGolden proves the CLI emits
 // exactly those bytes.
 //
-// A corpus that declares a host twice is the only case in which the full
-// rendering may legitimately differ: the head and host-variant cases use "that
-// host's first planned path" (docs/plan.md, "Case families";
-// internal/plan/generate.go, addHostVariantAndHeadCases), the first request
-// emitted for the host. The order-independent projection - every other case,
-// the findings and the warnings - must be byte-identical in every order.
+// The whole rendering is compared, every case included: the head and
+// host-variant cases use the smallest planned path of their host
+// (internal/plan/generate.go, builder.plannedPaths) and the VAR-PLAN-0006
+// warning names the smallest namespace and name among the Ingresses that
+// turned host-wide regex matching on (internal/plan/nginx.go,
+// markRegexHost), so no part of the plan depends on the input order.
 func TestPlanJSONIsIndependentOfInputOrder(t *testing.T) {
 	for _, corpus := range determinismCorpora(t) {
 		for _, options := range determinismProfiles {
 			t.Run(corpus.name+"/"+options.Profile, func(t *testing.T) {
-				baseline := plan.Build(corpus.resources, options)
-				baselineFull := renderPlan(t, baseline)
-				baselineProjected := projectedJSON(t, baseline)
+				baseline := renderPlan(t, plan.Build(corpus.resources, options))
 				rng := rand.New(rand.NewSource(determinismSeed))
 				for shuffle := 1; shuffle <= determinismShuffles; shuffle++ {
 					shuffled := shuffledResources(corpus.resources, rng)
-					result := plan.Build(shuffled, options)
-					projected := projectedJSON(t, result)
-					if !bytes.Equal(projected, baselineProjected) {
-						t.Fatalf("corpus %s profile %s shuffle %d: the order-independent projection changed, first difference at byte %d", corpus.name, options.Profile, shuffle, firstDifference(baselineProjected, projected))
-					}
-					if corpus.sharedHost {
-						continue
-					}
-					full := renderPlan(t, result)
-					if !bytes.Equal(full, baselineFull) {
-						t.Fatalf("corpus %s profile %s shuffle %d: the rendered plan changed, first difference at byte %d", corpus.name, options.Profile, shuffle, firstDifference(baselineFull, full))
+					full := renderPlan(t, plan.Build(shuffled, options))
+					if !bytes.Equal(full, baseline) {
+						t.Fatalf("corpus %s profile %s shuffle %d: the rendered plan changed, first difference at byte %d", corpus.name, options.Profile, shuffle, firstDifference(baseline, full))
 					}
 				}
 			})
@@ -682,54 +554,43 @@ func TestPlanJSONIsIndependentOfInputOrder(t *testing.T) {
 	}
 }
 
-// TestOrderSensitivityIsLimitedToTheHostScopedFamilies proves that the only
-// part of the plan that depends on the order of the input resources is the
-// host-scoped pair of families.
+// TestPlanJSONIsIdenticalInEveryInputOrder proves that the full plan JSON is
+// byte-identical in every input order, for every corpus and both profiles, and
+// that the head and host-variant cases use the smallest planned path of their
+// host in every one of those orders.
 //
-// Exactly two parts of the output are order-sensitive, and both are documented:
-//  1. the head and host-variant cases use "that host's first planned path"
-//     (docs/plan.md, "Case families"; ADR 0005, "Host-variant and head
-//     families"): internal/plan/generate.go records the first request emitted
-//     for a host in builder.firstPaths (addPath -> emit) and
-//     addHostVariantAndHeadCases reads it, so the path, and with it the case
-//     id, depends on which resource is read first;
-//  2. the VAR-PLAN-0006 warning names the Ingress that turned host-wide regex
-//     matching on: internal/plan/nginx.go markRegexHost records the first
-//     resource it sees. The corpora used here keep at most one resource per
-//     host carrying use-regex or rewrite-target, so this warning never moves.
+// Sources: CONVENTIONS.md ("Same input, same output"), docs/plan.md
+// ("Determinism guarantees": the plan output does not depend on the order of
+// the input) and ADR 0005 ("Determinism is part of the contract").
 //
-// Everything else - the remaining cases, the findings and the warnings - is
-// byte-identical in every input order.
-func TestOrderSensitivityIsLimitedToTheHostScopedFamilies(t *testing.T) {
+// The corpora that declare a host twice are the interesting ones: the head and
+// host-variant cases of a shared host would use whichever path was planned
+// first if the rule were order-dependent, and the VAR-PLAN-0006 warning would
+// name whichever Ingress turned the host-wide regex scope on first. Both are
+// chosen by a stable rule now, so the two input orders below and every shuffle
+// of them render the same bytes.
+func TestPlanJSONIsIdenticalInEveryInputOrder(t *testing.T) {
 	for _, corpus := range determinismCorpora(t) {
-		if !corpus.sharedHost {
-			continue
-		}
 		for _, options := range determinismProfiles {
 			t.Run(corpus.name+"/"+options.Profile, func(t *testing.T) {
-				forward := corpus.resources
-				reversed := reversedResources(corpus.resources)
-				planForward := plan.Build(forward, options)
-				planReversed := plan.Build(reversed, options)
-				projectedForward := projectedJSON(t, planForward)
-				projectedReversed := projectedJSON(t, planReversed)
-				if !bytes.Equal(projectedForward, projectedReversed) {
-					t.Fatalf("corpus %s profile %s: the order-independent projection changed between two input orders, first difference at byte %d", corpus.name, options.Profile, firstDifference(projectedForward, projectedReversed))
+				forward := plan.Build(corpus.resources, options)
+				forwardJSON := renderPlan(t, forward)
+				assertHostScopedCases(t, forward)
+				reversed := plan.Build(reversedResources(corpus.resources), options)
+				reversedJSON := renderPlan(t, reversed)
+				if !bytes.Equal(forwardJSON, reversedJSON) {
+					t.Fatalf("corpus %s profile %s: the rendered plan changed between two input orders, first difference at byte %d", corpus.name, options.Profile, firstDifference(forwardJSON, reversedJSON))
 				}
-				assertHostScopedCases(t, forward, planForward)
-				assertHostScopedCases(t, reversed, planReversed)
-				assertOnlyHostScopedPathsChanged(t, planForward, planReversed)
-				assertSomeHostScopedPathMoved(t, planForward, planReversed)
+				assertHostScopedCases(t, reversed)
 				rng := rand.New(rand.NewSource(determinismSeed))
 				for shuffle := 1; shuffle <= determinismShuffles; shuffle++ {
 					shuffled := shuffledResources(corpus.resources, rng)
 					result := plan.Build(shuffled, options)
-					projected := projectedJSON(t, result)
-					if !bytes.Equal(projected, projectedForward) {
-						t.Fatalf("corpus %s profile %s shuffle %d: the order-independent projection changed, first difference at byte %d", corpus.name, options.Profile, shuffle, firstDifference(projectedForward, projected))
+					rendered := renderPlan(t, result)
+					if !bytes.Equal(rendered, forwardJSON) {
+						t.Fatalf("corpus %s profile %s shuffle %d: the rendered plan changed, first difference at byte %d", corpus.name, options.Profile, shuffle, firstDifference(forwardJSON, rendered))
 					}
-					assertHostScopedCases(t, shuffled, result)
-					assertOnlyHostScopedPathsChanged(t, planForward, result)
+					assertHostScopedCases(t, result)
 				}
 			})
 		}

@@ -88,8 +88,9 @@ type Options struct {
 	Profile string
 }
 
-// Build derives cases and findings from parsed Ingress resources. Resources are
-// processed in the given order, which makes the output deterministic.
+// Build derives cases and findings from parsed Ingress resources. The output
+// does not depend on the order of the resources: every part of it is either
+// derived from one resource or chosen by a stable rule.
 func Build(resources []ingress.Ingress, options Options) Plan {
 	builder := newBuilder(options)
 	builder.run(resources)
