@@ -1,0 +1,23 @@
+{
+  "apiVersion": "networking.k8s.io/v1",
+  "kind": "Ingress",
+  "metadata": {
+    "name": "data",
+    "namespace": "edge"
+  },
+  "spec": {
+    "rules": [
+      {
+        "host": "data.example.com",
+        "http": {
+          "paths": [
+            {
+              "path": "/data",
+              "pathType": "Prefix"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

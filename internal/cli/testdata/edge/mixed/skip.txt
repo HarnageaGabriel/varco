@@ -1,0 +1,12 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: skipped-text
+  namespace: edge
+spec:
+  rules:
+    - host: skipped-text.example.com
+      http:
+        paths:
+          - path: /skipped-text
+            pathType: Prefix

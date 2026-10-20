@@ -1,0 +1,13 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: class-spec
+  namespace: edge
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: class-spec.example.com
+      http:
+        paths:
+          - path: /class-spec
+            pathType: Prefix
