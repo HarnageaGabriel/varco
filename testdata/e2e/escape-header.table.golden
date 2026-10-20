@@ -1,0 +1,11 @@
+VERDICT             INCONCLUSIVE
+COVERAGE            planned=1 executed=1 equivalent=0 different=0 inconclusive=1 skipped=0
+BODY POLICY         2xx
+REPEAT              1
+EXCLUDED            0
+UNSUPPORTED         0
+EXPIRED EXCEPTIONS  -
+IGNORED FIELDS      Date, Server, Via, X-Request-Id, Set-Cookie values
+CASES 1
+ID            HOST             METHOD  PATH  FAMILY  OUTCOME       FIELD  CODE  OLD  NEW  NOTE
+cccccccccccc  app.example.com  GET     /     base    INCONCLUSIVE  -      -     -    -    VAR-NET-0001: probe old: probe 127.0.0.1:<old-port>: read response: invalid HTTP response

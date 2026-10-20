@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "verdict": "INCONCLUSIVE",
+  "coverage": {
+    "planned": 1,
+    "executed": 1,
+    "equivalent": 0,
+    "different": 0,
+    "inconclusive": 1,
+    "skipped": 0
+  },
+  "repeat": 1,
+  "body_policy": "2xx",
+  "excluded": 0,
+  "unsupported_count": 0,
+  "unsupported": [],
+  "expired_exceptions": [],
+  "ignored_fields": [
+    "Date",
+    "Server",
+    "Via",
+    "X-Request-Id",
+    "Set-Cookie values"
+  ],
+  "cases": [
+    {
+      "case_id": "cccccccccccc",
+      "outcome": "INCONCLUSIVE",
+      "differences": [],
+      "error": "VAR-NET-0001: probe old: probe 127.0.0.1:<old-port>: read response: invalid HTTP response"
+    }
+  ],
+  "redacted": true
+}

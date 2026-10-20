@@ -32,12 +32,12 @@ func Table(w io.Writer, differences []compare.Difference, options Options) error
 		return err
 	}
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	if _, err := fmt.Fprintln(tw, "PATH\tCODE\tFIELD\tOLD\tNEW"); err != nil {
+	if err := writeRow(tw, "PATH", "CODE", "FIELD", "OLD", "NEW"); err != nil {
 		return err
 	}
 	for _, raw := range differences {
 		d := displayDifference(raw, options)
-		if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", d.Path, d.Code, d.Field, d.Old, d.New); err != nil {
+		if err := writeRow(tw, d.Path, string(d.Code), d.Field, d.Old, d.New); err != nil {
 			return err
 		}
 	}
