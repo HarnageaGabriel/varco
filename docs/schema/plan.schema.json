@@ -1,0 +1,242 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/HarnageaGabriel/varco/tree/main/docs/schema/plan.schema.json",
+  "title": "varco plan JSON",
+  "description": "The machine-readable plan written by `varco plan --format json`. The envelope is versioned by schema_version; additive changes keep it at 1.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "cases",
+    "unsupported",
+    "warnings"
+  ],
+  "properties": {
+    "schema_version": {
+      "description": "The version of the document shape. Always 1: an additive change does not bump it.",
+      "type": "integer",
+      "const": 1
+    },
+    "profile": {
+      "description": "The planner profile that produced the cases. An additive field, so a consumer must accept a document without it.",
+      "type": "string",
+      "enum": [
+        "nginx",
+        "generic"
+      ]
+    },
+    "cases": {
+      "description": "The cases to run, sorted by (host, path, scheme, method, family, id).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/case"
+      }
+    },
+    "unsupported": {
+      "description": "What varco could not plan, with the reason why.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "warnings": {
+      "description": "The conditions that qualify the generated cases.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/warning"
+      }
+    }
+  },
+  "$defs": {
+    "case": {
+      "description": "One request varco can send to both endpoints.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "host",
+        "scheme",
+        "method",
+        "path",
+        "family",
+        "source"
+      ],
+      "properties": {
+        "id": {
+          "description": "The first 12 hex characters of the SHA-256 of the canonical case. Stable across runs and independent of generation order.",
+          "type": "string"
+        },
+        "host": {
+          "description": "The request host.",
+          "type": "string"
+        },
+        "sni": {
+          "description": "The TLS server name, present for https cases.",
+          "type": "string"
+        },
+        "scheme": {
+          "description": "The request scheme.",
+          "type": "string",
+          "enum": [
+            "http",
+            "https"
+          ]
+        },
+        "method": {
+          "description": "The HTTP method. Only GET, HEAD and OPTIONS are planned (ADR 0003).",
+          "type": "string",
+          "enum": [
+            "GET",
+            "HEAD",
+            "OPTIONS"
+          ]
+        },
+        "path": {
+          "description": "The request path.",
+          "type": "string"
+        },
+        "headers": {
+          "description": "The request headers varco sends with the case.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/header"
+          }
+        },
+        "family": {
+          "description": "The behavior the case isolates (ADR 0005).",
+          "type": "string",
+          "enum": [
+            "base",
+            "trailing-slash",
+            "subpath",
+            "prefix-boundary",
+            "case-flip",
+            "dot-segments",
+            "double-slash",
+            "http-redirect",
+            "cors-preflight",
+            "rewrite",
+            "app-root",
+            "redirect-annotation",
+            "default-backend",
+            "unmatched-route",
+            "host-variant",
+            "head"
+          ]
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "note": {
+          "description": "Why the case exists. It states no expected answer.",
+          "type": "string"
+        }
+      }
+    },
+    "header": {
+      "description": "One request header of a case.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "name",
+        "values"
+      ],
+      "properties": {
+        "name": {
+          "description": "The header name.",
+          "type": "string"
+        },
+        "values": {
+          "description": "The header values varco sends.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "source": {
+      "description": "Where a case came from: the Ingress identity, the rule and path indexes, and the annotation that triggered it.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "ingress",
+        "rule",
+        "path"
+      ],
+      "properties": {
+        "ingress": {
+          "description": "The Ingress identity.",
+          "type": "string"
+        },
+        "rule": {
+          "description": "The rule index inside the Ingress.",
+          "type": "integer"
+        },
+        "path": {
+          "description": "The path index inside the rule.",
+          "type": "integer"
+        },
+        "annotation": {
+          "description": "The annotation that triggered the case, when one did.",
+          "type": "string"
+        }
+      }
+    },
+    "finding": {
+      "description": "Something varco cannot plan or test, with the reason why.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "code",
+        "ingress",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "description": "The stable diagnostic code, for example VAR-PLAN-0001.",
+          "type": "string"
+        },
+        "ingress": {
+          "description": "The Ingress the finding refers to.",
+          "type": "string"
+        },
+        "annotation": {
+          "description": "The annotation the finding refers to.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The path the finding refers to.",
+          "type": "string"
+        },
+        "message": {
+          "description": "What varco could not do, and why.",
+          "type": "string"
+        }
+      }
+    },
+    "warning": {
+      "description": "A condition that qualifies the generated cases.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "description": "The stable diagnostic code, for example VAR-PLAN-0006.",
+          "type": "string"
+        },
+        "ingress": {
+          "description": "The Ingress the warning refers to.",
+          "type": "string"
+        },
+        "message": {
+          "description": "What the condition is.",
+          "type": "string"
+        }
+      }
+    }
+  }
+}

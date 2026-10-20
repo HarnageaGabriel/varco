@@ -188,6 +188,14 @@ trailer headers as `Trailer:<Name>`, `tls.version`, `certificate.<field>`
 
 The last three fields are additive; `schema_version` stays `1`.
 
+The JSON report is published as a JSON Schema:
+[run-report.schema.json](schema/run-report.schema.json). It names every field,
+its type and the closed lists of outcomes, verdicts and body policies, so any
+standard JSON Schema validator can check a report. The envelope accepts an
+unknown top-level field, because a new top-level field is an additive change
+that keeps `schema_version` at `1`; see [docs/schema](schema/) for the
+compatibility promise.
+
 `--format table` prints a summary block (verdict, coverage, body policy, repeat,
 excluded, unsupported count, expired exceptions, ignored fields) followed by one
 row per reportable case and its differences. Each row carries the case `ID`,
