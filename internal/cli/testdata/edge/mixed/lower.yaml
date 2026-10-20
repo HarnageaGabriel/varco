@@ -1,0 +1,12 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lower
+  namespace: edge
+spec:
+  rules:
+    - host: lower.example.com
+      http:
+        paths:
+          - path: /lower
+            pathType: Prefix

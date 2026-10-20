@@ -1,0 +1,12 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: beta
+  namespace: edge
+spec:
+  rules:
+    - host: beta.example.com
+      http:
+        paths:
+          - path: /beta
+            pathType: Prefix
