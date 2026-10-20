@@ -28,8 +28,28 @@ stored in the repository.
 5. After the draft assets exist, replace every placeholder hash value in
    `.krew.yaml` with the corresponding hash from `checksums.txt`, then commit
    and publish the Krew index manifest. Done for v0.1.0: every hash is filled
-   in; the Krew index submission is still pending.
+   in; the Krew index submission is still pending. The script in step 7 does
+   the same replacement once the release is published.
 6. Publish the draft only after verification and maintainer review.
+7. Right after publishing, update the version strings and the Krew hashes:
+
+   ```sh
+   sh scripts/update-release-docs.sh X.Y.Z
+   ```
+
+   The version is `MAJOR.MINOR.PATCH` without the leading `v`. The script
+   reads the current version from `.krew.yaml`, takes the hash of every
+   archive from the `checksums.txt` of the release - downloaded with
+   `gh release download vX.Y.Z --pattern checksums.txt`, or passed as the
+   second argument - and rewrites `.krew.yaml`, `README.md`,
+   `docs/install.md`, `docs/ci.md` and
+   `examples/github-actions/varco-compare.yml`. It fails when an archive is
+   missing from the checksums, refuses to run when the files it would change
+   have uncommitted changes (unless `--force` is given) and changes nothing
+   on a second run. It touches no other file: `CHANGELOG.md`, the ADRs and
+   the release notes stay as they are. Review the diff and commit it.
+   `sh scripts/test-update-release-docs.sh` runs the script against the
+   fixtures in `scripts/testdata/release-docs/`.
 
 ## Verify a release
 
