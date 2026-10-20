@@ -1,0 +1,33 @@
+name: varco compare
+
+on:
+  workflow_dispatch:
+    inputs:
+      old_ip:
+        description: Old endpoint address
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    name: Compare endpoints
+    runs-on: ubuntu-latest
+    env:
+      OLD_IP: ${{ inputs.old_ip }}
+      VARCO_REPO: HarnageaGabriel/varco
+      VARCO_TAG: v0.1.0
+      VARCO_ARCHIVE: varco_0.1.0_linux_amd64.tar.gz
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download varco from the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist
+          gh release download $VARCO_TAG --repo $VARCO_REPO --pattern $VARCO_ARCHIVE --pattern checksums.txt --dir dist
