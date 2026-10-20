@@ -1,0 +1,30 @@
+apiVersion: krew.googlecontainertools.github.com/v1alpha2
+kind: Plugin
+metadata:
+  name: varco
+spec:
+  version: v0.1.0
+  homepage: https://github.com/HarnageaGabriel/varco
+  shortDescription: Compare HTTP endpoint behavior across two deployments.
+  platforms:
+    - selector:
+        matchLabels:
+          os: linux
+          arch: amd64
+      uri: https://github.com/HarnageaGabriel/varco/releases/download/v0.1.0/varco_0.1.0_linux_amd64.tar.gz
+      sha256: 1111111111111111111111111111111111111111111111111111111111111111
+      bin: varco
+    - selector:
+        matchLabels:
+          os: darwin
+          arch: arm64
+      uri: https://github.com/HarnageaGabriel/varco/releases/download/v0.1.0/varco_0.1.0_darwin_arm64.tar.gz
+      sha256: 2222222222222222222222222222222222222222222222222222222222222222
+      bin: varco
+    - selector:
+        matchLabels:
+          os: windows
+          arch: amd64
+      uri: https://github.com/HarnageaGabriel/varco/releases/download/v0.1.0/varco_0.1.0_windows_amd64.zip
+      sha256: 3333333333333333333333333333333333333333333333333333333333333333
+      bin: varco.exe
