@@ -320,6 +320,31 @@ func TestDefaultRunnerCommandError(t *testing.T) {
 	}
 }
 
+// Source: internal/kube/kube.go:129-147 and docs/adr/0006-redaction.md - a
+// kubectl failure prints the server URL of the request in the shape of
+// net/url.Error (Get "URL": err), and that URL carries the credentials of
+// the kubeconfig user.
+func TestDefaultRunnerCommandErrorRedactsQuotedURL(t *testing.T) {
+	installFakeKubectl(t)
+	const secretURL = "https://admin:sup3rs3cret@api.cluster.local:6443/api?timeout=32s"
+	t.Setenv(envFakeMode, fakeModeFail)
+	t.Setenv(envFakeStderr, "error: failed to list: Get \""+secretURL+"\": dial tcp 10.0.0.1:6443: connect: connection refused\n")
+	t.Setenv(envFakeExit, "1")
+
+	_, err := DefaultRunner{}.Run(context.Background(), []string{"get", "ingress"})
+	var commandError *CommandError
+	if !errors.As(err, &commandError) {
+		t.Fatalf("error = %v, want *CommandError", err)
+	}
+	message := commandError.Error()
+	if strings.Contains(message, "sup3rs3cret") || strings.Contains(message, "32s") {
+		t.Fatalf("message exposes the raw stderr: %q", message)
+	}
+	if !strings.Contains(message, "REDACTED") {
+		t.Fatalf("message is not redacted: %q", message)
+	}
+}
+
 // Source: internal/kube/kube.go:112-114 - a kubectl that cannot be resolved on
 // PATH is reported with the install hint.
 func TestDefaultRunnerMissingKubectl(t *testing.T) {

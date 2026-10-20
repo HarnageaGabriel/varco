@@ -51,3 +51,4 @@ not include rejected header text.
 
 - Secrets carried in path segments (for example `/reset/<token>`) are not redacted: the path is what varco compares and reports.
 - Query keys are kept as written, so a secret used as a bare key (`/cb?<token>`) is printed. Use `--show-sensitive` only for local debugging.
+- A URL inside a diagnostic message is only redacted when it starts with `http://` or `https://`; another scheme (`ssh://`, `ftp://`) keeps its credentials.

@@ -117,22 +117,191 @@ func sameUserinfo(got, want *url.Userinfo) bool {
 }
 
 // Source: docs/adr/0006-redaction.md; probe and run diagnostics pass through
-// Text so no URL-shaped value reaches output unredacted.
+// Text so no URL-shaped value reaches output unredacted. The scheme may start
+// at any offset inside a token, so a URL that is quoted, prefixed or wrapped
+// in punctuation is redacted as well.
 func TestText(t *testing.T) {
 	tests := []struct {
-		name  string
-		input string
-		want  string
+		name    string
+		input   string
+		want    string
+		secrets []string
 	}{
-		{"no url", "probe 10.0.0.2:80: dial tcp: connection refused", "probe 10.0.0.2:80: dial tcp: connection refused"},
-		{"embedded url", "probe failed for https://api.example.com/x?token=secret", "probe failed for https://api.example.com/x?token=REDACTED"},
-		{"empty", "", ""},
+		{
+			name:  "kubectl error with server url",
+			input: "error: failed to list: Get https://admin:sup3rs3cret@api.cluster.local:6443/api?timeout=32s: dial tcp 10.0.0.1:6443: connect: connection refused",
+			want:  "error: failed to list: Get https://REDACTED@api.cluster.local:6443/api?timeout=REDACTED: dial tcp 10.0.0.1:6443: connect: connection refused",
+			secrets: []string{
+				"sup3rs3cret",
+				"32s",
+			},
+		},
+		{
+			name:  "url after a prefix",
+			input: "error: proxy=https://admin:sup3rs3cret@api.cluster.local/api",
+			want:  "error: proxy=https://REDACTED@api.cluster.local/api",
+			secrets: []string{
+				"sup3rs3cret",
+			},
+		},
+		{
+			name:  "url in single quotes",
+			input: "error: url='https://admin:sup3rs3cret@api.cluster.local/api'",
+			want:  "error: url='https://REDACTED@api.cluster.local/api'",
+			secrets: []string{
+				"sup3rs3cret",
+			},
+		},
+		{
+			name:  "plain url token",
+			input: "https://api.example.com/x?token=secret",
+			want:  "https://api.example.com/x?token=REDACTED",
+			secrets: []string{
+				"secret",
+			},
+		},
+		{
+			name:  "url in double quotes",
+			input: `see "https://api.example.com/x?token=secret"`,
+			want:  `see "https://api.example.com/x?token=REDACTED"`,
+			secrets: []string{
+				"secret",
+			},
+		},
+		{
+			name:  "url in parentheses",
+			input: "(https://api.example.com/x?token=secret)",
+			want:  "(https://api.example.com/x?token=REDACTED)",
+			secrets: []string{
+				"secret",
+			},
+		},
+		{
+			name:  "url followed by a comma",
+			input: "error: failed for https://api.example.com/x?token=secret, retrying",
+			want:  "error: failed for https://api.example.com/x?token=REDACTED, retrying",
+			secrets: []string{
+				"secret",
+			},
+		},
+		{
+			name:  "two urls in one token",
+			input: "https://u1:p1@a.example/x,https://u2:p2@b.example/y",
+			want:  "https://REDACTED@a.example/x,https://REDACTED@b.example/y",
+			secrets: []string{
+				"p1",
+				"p2",
+			},
+		},
+		{
+			name:  "uppercase scheme",
+			input: "error: HTTPS://api.example.com/x?token=secret",
+			want:  "error: https://api.example.com/x?token=REDACTED",
+			secrets: []string{
+				"secret",
+			},
+		},
+		{
+			name:  "url with a fragment",
+			input: "error: see https://api.example.com/x#token=secret",
+			want:  "error: see https://api.example.com/x#REDACTED",
+			secrets: []string{
+				"secret",
+			},
+		},
+		{
+			name:  "unparseable url after a prefix",
+			input: "error: fetch https://example.com:notaport/x failed",
+			want:  "error: fetch REDACTED failed",
+			secrets: []string{
+				"notaport",
+			},
+		},
+		{
+			name:  "no url",
+			input: "probe 10.0.0.2:80: dial tcp: connection refused",
+			want:  "probe 10.0.0.2:80: dial tcp: connection refused",
+		},
+		{
+			name:  "embedded url",
+			input: "probe failed for https://api.example.com/x?token=secret",
+			want:  "probe failed for https://api.example.com/x?token=REDACTED",
+			secrets: []string{
+				"secret",
+			},
+		},
+		{
+			name:  "empty",
+			input: "",
+			want:  "",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := Text(test.input); got != test.want {
+			got := Text(test.input)
+			if got != test.want {
 				t.Fatalf("Text(%q) = %q, want %q", test.input, got, test.want)
+			}
+			for _, secret := range test.secrets {
+				if strings.Contains(got, secret) {
+					t.Fatalf("Text(%q) = %q exposes %q", test.input, got, secret)
+				}
+			}
+			if second := Text(got); second != got {
+				t.Fatalf("Text is not idempotent: %q != %q", got, second)
 			}
 		})
 	}
+}
+
+// Source: docs/adr/0006-redaction.md - a URL anywhere in a message keeps its
+// userinfo out of the output, whatever surrounds the URL.
+func FuzzText(f *testing.F) {
+	for _, seed := range []struct {
+		prefix   string
+		password string
+		suffix   string
+	}{
+		{"error: failed to list: Get ", "sup3rs3cret", ": dial tcp 10.0.0.1:6443: connect: connection refused"},
+		{"error: proxy=", "sup3rs3cret", ""},
+		{"error: url='", "sup3rs3cret", "'"},
+		{"", "s3cr3t", ""},
+		{"https://", "s3cr3t", ""},
+	} {
+		f.Add(seed.prefix, seed.password, seed.suffix)
+	}
+	f.Fuzz(func(t *testing.T, prefix, password, suffix string) {
+		input := prefix + "http://u:" + password + "@host/path" + suffix
+		first := Text(input)
+		if second := Text(first); second != first {
+			t.Fatalf("Text is not idempotent: %q != %q", first, second)
+		}
+		if !userinfoPassword(password) {
+			return
+		}
+		if strings.Contains(prefix, password) || strings.Contains(suffix, password) {
+			return
+		}
+		// The userinfo is redacted as a whole, so the output cannot depend on
+		// the password. A control password of the same shape proves that the
+		// password of the input does not survive in the output.
+		control := Text(prefix + "http://u:" + password + "x@host/path" + suffix)
+		if first != control {
+			t.Fatalf("Text(%q) = %q exposes the userinfo password", input, first)
+		}
+	})
+}
+
+// userinfoPassword reports whether password is the password of the userinfo
+// of the generated URL, so that only a real credential is checked.
+func userinfoPassword(password string) bool {
+	if password == "" {
+		return false
+	}
+	parsed, err := url.Parse("http://u:" + password + "@host/path")
+	if err != nil || parsed.User == nil {
+		return false
+	}
+	value, set := parsed.User.Password()
+	return set && value == password
 }
