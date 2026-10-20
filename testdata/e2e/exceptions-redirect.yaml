@@ -1,0 +1,14 @@
+version: 1
+exceptions:
+  - id: accepted-status
+    reason: "the old controller still answers / with the legacy 301 while the new one serves it directly"
+    match:
+      host: app.example.com
+      path: /
+      field: status
+  - id: accepted-location
+    reason: "the old controller redirects / to /x/, the new one answers without a redirect"
+    match:
+      host: app.example.com
+      path: /
+      field: location

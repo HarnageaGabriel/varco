@@ -1,0 +1,12 @@
+VERDICT             EQUIVALENT
+COVERAGE            planned=1 executed=1 equivalent=1 different=0 inconclusive=0 skipped=0
+BODY POLICY         2xx
+REPEAT              1
+EXCLUDED            0
+UNSUPPORTED         0
+EXPIRED EXCEPTIONS  -
+IGNORED FIELDS      Date, Server, Via, X-Request-Id, Set-Cookie values
+CASES 1
+ID            HOST             METHOD  PATH  FAMILY  OUTCOME     FIELD            CODE          OLD  NEW       NOTE
+bbbbbbbbbbbb  app.example.com  GET     /     base    EQUIVALENT  header.location  VAR-CMP-0002  /x/  (absent)  accepted (accepted-location): the old controller redirects / to /x/, the new one answers without a redirect
+bbbbbbbbbbbb  app.example.com  GET     /     base    EQUIVALENT  status           VAR-CMP-0001  301  200       accepted (accepted-status): the old controller still answers / with the legacy 301 while the new one serves it directly

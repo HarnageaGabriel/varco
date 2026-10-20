@@ -1,0 +1,13 @@
+VERDICT             DIFFERENT
+COVERAGE            planned=2 executed=1 equivalent=0 different=1 inconclusive=1 skipped=1
+BODY POLICY         2xx
+REPEAT              1
+EXCLUDED            0
+UNSUPPORTED         0
+EXPIRED EXCEPTIONS  -
+IGNORED FIELDS      Date, Server, Via, X-Request-Id, Set-Cookie values
+CASES 2
+ID            HOST             METHOD  PATH       FAMILY  OUTCOME       FIELD            CODE          OLD       NEW  NOTE
+dddddddddddd  app.example.com  GET     /          base    DIFFERENT     header.location  VAR-CMP-0002  (absent)  /x/  -
+dddddddddddd  app.example.com  GET     /          base    DIFFERENT     status           VAR-CMP-0001  200       301  -
+eeeeeeeeeeee  app.example.com  GET     /budgeted  base    INCONCLUSIVE  -                -             -         -    budget

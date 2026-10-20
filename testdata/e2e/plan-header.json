@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "profile": "nginx",
+  "cases": [
+    {
+      "id": "cccccccccccc",
+      "host": "app.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/",
+      "family": "base",
+      "source": {
+        "ingress": "e2e/spec",
+        "rule": 0,
+        "path": 0
+      }
+    }
+  ],
+  "unsupported": [],
+  "warnings": []
+}
