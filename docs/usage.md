@@ -5,7 +5,7 @@
 All three read only what you pass them; nothing sends traffic without `diff` or `run`:
 
 - **`varco diff`** sends one request (or a few paths) to two endpoints and reports the differences directly. Fastest way to check one route; no manifests needed.
-- **`varco plan`** derives the probe cases `run` would execute from Ingress manifests (`-f`, or a live cluster with `--from-cluster`) and lists what it cannot test. Sends nothing, contacts nothing (outside `kubectl get` with `--from-cluster`).
+- **`varco plan`** derives the probe cases `run` would execute from Ingress manifests (`-f`, or a live cluster with `--from-cluster`) and lists what it cannot test. Sends nothing, contacts nothing (outside `kubectl get` with `--from-cluster`). The flags of every command are in the [command reference](reference/README.md).
 - **`varco run`** executes a plan against the two endpoints and evaluates the observed differences through the policy layer with a verdict per [ADR 0007](adr/0007-verdict-model.md). Start with `--dry-run` to see the requests a run would send.
 
 A step-by-step cutover rehearsal, from two controllers side by side to a green CI run, is in [cookbook.md](cookbook.md).
@@ -18,7 +18,7 @@ Reads Kubernetes Ingress manifests and prints the probe cases `varco run` will e
 varco plan -f ingress.yaml --format json
 ```
 
-Flags: `-f <file|directory|->` (repeatable; directories are walked recursively over `*.yaml`, `*.yml` and `*.json`, sorted by path), `--format (table|json)`, `--ingress-class NAME`, `--default-host HOST`, `--profile (nginx|generic)`. Manifests must be `networking.k8s.io/v1`; `kind: List` and multi-document streams are accepted and other kinds are ignored. Exit code 0 means a plan was produced (unsupported findings are part of the output), 2 is a usage or manifest parse error, 4 means the report could not be written. Case families, findings and the stable JSON schema are documented in [plan.md](plan.md).
+Flags: `-f <file|directory|->` (repeatable; directories are walked recursively over `*.yaml`, `*.yml` and `*.json`, sorted by path), `--format (table|json)`, `--ingress-class NAME`, `--default-host HOST`, `--profile (nginx|generic)`. Manifests must be `networking.k8s.io/v1`; `kind: List` and multi-document streams are accepted and other kinds are ignored. Exit code 0 means a plan was produced (unsupported findings are part of the output), 2 is a usage or manifest parse error, 4 means the report could not be written. The failures behind these codes and their fixes are in [troubleshooting.md](troubleshooting.md). Case families, findings and the stable JSON schema are documented in [plan.md](plan.md).
 
 `--profile` picks the planner behavior ([ADR 0008](adr/0008-planner-profiles.md)): `nginx` (default) adds the ingress-nginx annotation families; `generic` is controller-agnostic, plans only the core HTTP families, and warns that annotations are ignored (`VAR-PLAN-0009`). The top-level `profile` of the JSON output records which one was used.
 
