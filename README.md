@@ -265,8 +265,10 @@ where the test cases come from.
 ## Documentation
 
 - [Usage](docs/usage.md)
+- [Cookbook: cutover rehearsal](docs/cookbook.md)
 - [Plan: case families and findings](docs/plan.md)
 - [Run: flags, exceptions and the report](docs/run.md)
+- [Troubleshooting](docs/troubleshooting.md)
 - [Exit codes](docs/exit-codes.md)
 - [Diagnostic codes](docs/diagnostics/README.md)
 - [Architecture decisions](docs/adr)

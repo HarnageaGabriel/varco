@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"schema_version\": 1, \"profile\": \"nginx\", \"cases\": [], \"unsupported\": [{\"code\": \"VAR-PLAN-0005\", \"ingress\": \"dev/internal\", \"message\": \"rule has no host\"}], \"warnings\": []}")

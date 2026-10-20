@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"kind\": \"List\", \"items\": [{\"metadata\": {\"name\": 99999999999999999999}}]}")

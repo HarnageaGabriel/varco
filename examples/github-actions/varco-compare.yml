@@ -1,0 +1,156 @@
+name: varco compare
+
+on:
+  workflow_dispatch:
+    inputs:
+      old_ip:
+        description: Old endpoint address (IP, or IP:port for a non default port)
+        required: true
+        type: string
+      new_ip:
+        description: New endpoint address (IP, or IP:port for a non default port)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: varco-compare-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  compare:
+    name: Compare endpoints
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OLD_IP: ${{ inputs.old_ip }}
+      NEW_IP: ${{ inputs.new_ip }}
+      MANIFESTS: manifests
+      EXCEPTIONS: varco/exceptions.yaml
+      VARCO_REPO: HarnageaGabriel/varco
+      VARCO_TAG: v0.1.0
+      VARCO_ARCHIVE: varco_0.1.0_linux_amd64.tar.gz
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download varco from the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist
+          gh release download $VARCO_TAG --repo $VARCO_REPO --pattern $VARCO_ARCHIVE --pattern checksums.txt --dir dist
+
+      - name: Verify the sha256 checksum
+        run: |
+          cd dist
+          sha256sum --ignore-missing --status -c checksums.txt
+          echo 'sha256 checksum verified for '$VARCO_ARCHIVE
+
+      - name: Verify the build attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd dist
+          gh attestation verify $VARCO_ARCHIVE --repo $VARCO_REPO
+
+      - name: Extract varco
+        run: |
+          tar -xzf dist/$VARCO_ARCHIVE -C dist
+          chmod +x dist/varco
+
+      - name: Print the varco version
+        run: |
+          dist/varco version
+
+      - name: Resolve the exceptions file
+        run: |
+          if [ ! -f "$EXCEPTIONS" ]; then
+            mkdir -p "$(dirname "$EXCEPTIONS")"
+            printf 'version: 1\nexceptions: []\n' > "$EXCEPTIONS"
+            echo '::notice::no exceptions file in this repository; running with no accepted differences'
+          fi
+
+      - name: Plan the probes from the repository manifests
+        run: |
+          code=0
+          dist/varco plan -f "$MANIFESTS" --format json > plan.json || code=$?
+          if [ $code -ne 0 ]; then
+            echo '::error::varco plan failed; see docs/exit-codes.md'
+            exit $code
+          fi
+
+      - name: Compare the endpoints and write the JSON report
+        id: compare
+        run: |
+          code=0
+          dist/varco run --plan plan.json --old "$OLD_IP" --new "$NEW_IP" --exceptions "$EXCEPTIONS" --format json --output report.json || code=$?
+          echo exit_code=$code >> $GITHUB_OUTPUT
+
+      - name: Compare the endpoints and write the table report
+        id: table
+        run: |
+          code=0
+          dist/varco run --plan plan.json --old "$OLD_IP" --new "$NEW_IP" --exceptions "$EXCEPTIONS" --format table --output report.txt || code=$?
+          echo exit_code=$code >> $GITHUB_OUTPUT
+
+      - name: Write the job summary
+        if: always()
+        run: |
+          {
+            echo '### varco compare'
+            echo
+            echo 'old endpoint: '$OLD_IP
+            echo 'new endpoint: '$NEW_IP
+            echo 'exit code: '${{ steps.compare.outputs.exit_code }}
+            echo
+            echo '```text'
+            if [ -f report.txt ]; then
+              cat report.txt
+            else
+              echo 'varco wrote no table report'
+            fi
+            echo '```'
+          } >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload the JSON report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: varco-report
+          path: report.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Gate on the verdict
+        if: always()
+        run: |
+          code=${{ steps.compare.outputs.exit_code || 'none' }}
+          case $code in
+            0)
+              echo 'verdict EQUIVALENT: the endpoints are equivalent on the covered cases'
+              ;;
+            1)
+              echo '::error::verdict DIFFERENT: a difference is not accepted by policy (docs/exit-codes.md)'
+              exit 1
+              ;;
+            2)
+              echo '::error::usage or configuration error: check the plan, the exceptions file and the flags (docs/exit-codes.md)'
+              exit 2
+              ;;
+            3)
+              echo '::error::verdict INCONCLUSIVE: a case could not be observed or was skipped (docs/exit-codes.md)'
+              exit 3
+              ;;
+            4)
+              echo '::error::internal error: varco failed unexpectedly (docs/exit-codes.md)'
+              exit 4
+              ;;
+            *)
+              echo '::error::varco produced no exit code; see the job log'
+              exit 1
+              ;;
+          esac
