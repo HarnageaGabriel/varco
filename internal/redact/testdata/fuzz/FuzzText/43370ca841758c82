@@ -1,0 +1,4 @@
+go test fuzz v1
+string("error: failed to list: Get ")
+string("sup3rs3cret")
+string(": dial tcp 10.0.0.1:6443: connect: connection refused")
