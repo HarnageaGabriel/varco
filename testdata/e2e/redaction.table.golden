@@ -1,0 +1,12 @@
+VERDICT             DIFFERENT
+COVERAGE            planned=1 executed=1 equivalent=0 different=1 inconclusive=0 skipped=0
+BODY POLICY         2xx
+REPEAT              1
+EXCLUDED            0
+UNSUPPORTED         0
+EXPIRED EXCEPTIONS  -
+IGNORED FIELDS      Date, Server, Via, X-Request-Id, Set-Cookie values
+CASES 1
+ID            HOST             METHOD  PATH       FAMILY  OUTCOME    FIELD              CODE          OLD                                                                                                                      NEW                                                                                                                         NOTE
+111111111111  app.example.com  GET     /callback  base    DIFFERENT  header.location    VAR-CMP-0002  /login?token=REDACTED&next=REDACTED                                                                                      /login?token=REDACTED&next=REDACTED (query values differ)                                                                   -
+111111111111  app.example.com  GET     /callback  base    DIFFERENT  header.set-cookie  VAR-CMP-0007  session{secure=true,http_only=false,same_site=Unknown,path="/",domain="",max_age=false,expires=false,partitioned=false}  session{secure=true,http_only=false,same_site=Unknown,path="/api",domain="",max_age=false,expires=false,partitioned=false}  -

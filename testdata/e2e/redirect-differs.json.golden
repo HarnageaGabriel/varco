@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "verdict": "DIFFERENT",
+  "coverage": {
+    "planned": 1,
+    "executed": 1,
+    "equivalent": 0,
+    "different": 1,
+    "inconclusive": 0,
+    "skipped": 0
+  },
+  "repeat": 1,
+  "body_policy": "2xx",
+  "excluded": 0,
+  "unsupported_count": 0,
+  "unsupported": [],
+  "expired_exceptions": [],
+  "ignored_fields": [
+    "Date",
+    "Server",
+    "Via",
+    "X-Request-Id",
+    "Set-Cookie values"
+  ],
+  "cases": [
+    {
+      "case_id": "bbbbbbbbbbbb",
+      "outcome": "DIFFERENT",
+      "differences": [
+        {
+          "code": "VAR-CMP-0002",
+          "field": "header.location",
+          "old": "/x/",
+          "new": "(absent)",
+          "accepted": false
+        },
+        {
+          "code": "VAR-CMP-0001",
+          "field": "status",
+          "old": "301",
+          "new": "200",
+          "accepted": false
+        }
+      ]
+    }
+  ],
+  "redacted": true
+}

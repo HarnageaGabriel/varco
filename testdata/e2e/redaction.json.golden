@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "verdict": "DIFFERENT",
+  "coverage": {
+    "planned": 1,
+    "executed": 1,
+    "equivalent": 0,
+    "different": 1,
+    "inconclusive": 0,
+    "skipped": 0
+  },
+  "repeat": 1,
+  "body_policy": "2xx",
+  "excluded": 0,
+  "unsupported_count": 0,
+  "unsupported": [],
+  "expired_exceptions": [],
+  "ignored_fields": [
+    "Date",
+    "Server",
+    "Via",
+    "X-Request-Id",
+    "Set-Cookie values"
+  ],
+  "cases": [
+    {
+      "case_id": "111111111111",
+      "outcome": "DIFFERENT",
+      "differences": [
+        {
+          "code": "VAR-CMP-0002",
+          "field": "header.location",
+          "old": "/login?token=REDACTED\u0026next=REDACTED",
+          "new": "/login?token=REDACTED\u0026next=REDACTED (query values differ)",
+          "accepted": false
+        },
+        {
+          "code": "VAR-CMP-0007",
+          "field": "header.set-cookie",
+          "old": "session{secure=true,http_only=false,same_site=Unknown,path=\"/\",domain=\"\",max_age=false,expires=false,partitioned=false}",
+          "new": "session{secure=true,http_only=false,same_site=Unknown,path=\"/api\",domain=\"\",max_age=false,expires=false,partitioned=false}",
+          "accepted": false
+        }
+      ]
+    }
+  ],
+  "redacted": true
+}
