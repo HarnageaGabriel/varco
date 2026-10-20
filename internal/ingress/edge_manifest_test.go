@@ -193,7 +193,7 @@ kind: Ingress
 metadata:
   name: legacy
 `,
-			wantErr: `document 1: VAR-PLAN-0003: unsupported Ingress apiVersion "extensions/v1beta1"; only networking.k8s.io/v1 is supported`,
+			wantErr: `VAR-PLAN-0003: document 1: unsupported Ingress apiVersion "extensions/v1beta1"; only networking.k8s.io/v1 is supported`,
 		},
 		{
 			name: "networking v1beta1 is rejected",
@@ -202,7 +202,7 @@ kind: Ingress
 metadata:
   name: beta
 `,
-			wantErr: `document 1: VAR-PLAN-0003: unsupported Ingress apiVersion "networking.k8s.io/v1beta1"; only networking.k8s.io/v1 is supported`,
+			wantErr: `VAR-PLAN-0003: document 1: unsupported Ingress apiVersion "networking.k8s.io/v1beta1"; only networking.k8s.io/v1 is supported`,
 		},
 		{
 			name: "ingress without a spec",
@@ -269,7 +269,7 @@ metadata:
   name: duplicate
   name: duplicate-again
 `,
-			wantErr: "document 1: VAR-PLAN-0003: cannot decode resource: yaml: unmarshal errors:\n  line 5: mapping key \"name\" already defined at line 4",
+			wantErr: "VAR-PLAN-0003: document 1: cannot decode resource: yaml: unmarshal errors:\n  line 5: mapping key \"name\" already defined at line 4",
 		},
 		{
 			name: "duplicate keys at the root of the document",
@@ -279,7 +279,7 @@ apiVersion: networking.k8s.io/v1
 metadata:
   name: duplicate
 `,
-			wantErr: "document 1: VAR-PLAN-0003: cannot decode resource header: yaml: unmarshal errors:\n  line 3: mapping key \"apiVersion\" already defined at line 1",
+			wantErr: "VAR-PLAN-0003: document 1: cannot decode resource header: yaml: unmarshal errors:\n  line 3: mapping key \"apiVersion\" already defined at line 1",
 		},
 	}
 	for _, test := range tests {
@@ -406,12 +406,12 @@ func TestParseAnnotationScalarEdges(t *testing.T) {
 		{
 			name:        "mapping",
 			annotations: "bad:\n  nested: 1",
-			wantErr:     `document 1: VAR-PLAN-0003: metadata.annotations["bad"] must be a scalar value`,
+			wantErr:     `VAR-PLAN-0003: document 1: metadata.annotations["bad"] must be a scalar value`,
 		},
 		{
 			name:        "sequence",
 			annotations: "bad: [a, b]",
-			wantErr:     `document 1: VAR-PLAN-0003: metadata.annotations["bad"] must be a scalar value`,
+			wantErr:     `VAR-PLAN-0003: document 1: metadata.annotations["bad"] must be a scalar value`,
 		},
 	}
 	for _, test := range tests {
@@ -497,7 +497,7 @@ spec:
 	})
 	t.Run("aliases over the decoder alias limit", func(t *testing.T) {
 		_, err := Parse(strings.NewReader(edgeAliasBomb(200, 1000)))
-		edgeManifestError(t, err, "document 1: VAR-PLAN-0003: cannot decode resource: yaml: document contains excessive aliasing")
+		edgeManifestError(t, err, "VAR-PLAN-0003: document 1: cannot decode resource: yaml: document contains excessive aliasing")
 	})
 }
 
@@ -569,7 +569,7 @@ func TestParseDepthLimitEdges(t *testing.T) {
 	})
 	t.Run("one level over the depth limit", func(t *testing.T) {
 		_, err := Parse(strings.NewReader(deepManifest(61)))
-		edgeManifestError(t, err, "document 1: VAR-PLAN-0003: YAML document nesting exceeds the maximum depth of 64")
+		edgeManifestError(t, err, "VAR-PLAN-0003: document 1: YAML document nesting exceeds the maximum depth of 64")
 	})
 }
 
@@ -588,7 +588,7 @@ func TestParseNodeLimitEdges(t *testing.T) {
 	})
 	t.Run("one node over the limit", func(t *testing.T) {
 		_, err := Parse(strings.NewReader(nodeManifest(99989)))
-		edgeManifestError(t, err, "document 1: VAR-PLAN-0003: YAML document exceeds the 100000-node limit")
+		edgeManifestError(t, err, "VAR-PLAN-0003: document 1: YAML document exceeds the 100000-node limit")
 	})
 }
 

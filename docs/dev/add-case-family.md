@@ -70,8 +70,9 @@ const (
 	// FamilyHostVariant sends the same path with a modified Host header, so a
 	// difference in host matching between the two controllers becomes visible.
 	FamilyHostVariant = "host-variant"
-	// FamilyHead sends a HEAD request on the first planned path, so a
-	// difference in HEAD handling between the two controllers becomes visible.
+	// FamilyHead sends a HEAD request on the smallest planned path of the
+	// host, so a difference in HEAD handling between the two controllers
+	// becomes visible.
 	FamilyHead = "head"
 )
 ```
@@ -167,13 +168,16 @@ and are the smallest complete example of the whole change. This is what
 **1. The constant** in [internal/plan/generate.go](../../internal/plan/generate.go):
 
 ```go
-// FamilyHead sends a HEAD request on the first planned path, so a
-// difference in HEAD handling between the two controllers becomes visible.
+// FamilyHead sends a HEAD request on the smallest planned path of the
+// host, so a difference in HEAD handling between the two controllers
+// becomes visible.
 FamilyHead = "head"
 ```
 
 **2. The emit site.** `head` is a plan-wide family: it is planned once per
-concrete declared host, on that host's first planned path. It is emitted by
+concrete declared host, on the smallest planned path of that host: the
+lexicographically smallest planned request path of the host, so the plan does
+not depend on the order of the input. It is emitted by
 `(*builder).addHostVariantAndHeadCases` in
 [internal/plan/generate.go](../../internal/plan/generate.go), and the case
 carries the synthetic source:
@@ -185,13 +189,13 @@ const syntheticIngress = "varco"
 **3. The plan table row** in [docs/plan.md](../plan.md):
 
 ```
-| `head` | `HEAD` on the host's first planned path | HEAD handling (RFC 9110 section 9.3.2) must be equivalent between old and new; the case probes and asserts nothing |
+| `head` | `HEAD` on the host's smallest planned path | HEAD handling (RFC 9110 section 9.3.2) must be equivalent between old and new; the case probes and asserts nothing |
 ```
 
 **4. The README row** in [README.md](../../README.md):
 
 ```
-| `head`, `host-variant` | HEAD handling (RFC 9110 section 9.3.2) and host matching (RFC 3986 section 3.2.2, RFC 9110 section 7.2): one `HEAD` request and three `Host` header variants (upper-cased, trailing dot, explicit default port with SNI kept plain) per concrete host on its first planned path (synthetic plan-wide cases) |
+| `head`, `host-variant` | HEAD handling (RFC 9110 section 9.3.2) and host matching (RFC 3986 section 3.2.2, RFC 9110 section 7.2): one `HEAD` request and three `Host` header variants (upper-cased, trailing dot, explicit default port with SNI kept plain) per concrete host on the smallest planned path of that host (the lexicographically smallest planned request path, so the plan does not depend on the order of the input) (synthetic plan-wide cases) |
 ```
 
 **5. The schema enum** in

@@ -152,6 +152,37 @@ func TestPlanSortsWarnings(t *testing.T) {
 	}
 }
 
+// Source: internal/cli/plan.go kubeFailure; the stderr of kubectl is text a
+// remote server controls, so a control byte in it must not reach the operator's
+// terminal: it is printed as a visible \xNN escape (docs/adr/0006-redaction.md).
+func TestKubeFailureEscapesControlCharacters(t *testing.T) {
+	runner := &clusterRunner{responses: map[string]clusterResponse{
+		"get ingress -A -o json": {err: &kube.CommandError{
+			Exit:   1,
+			Stderr: "Error from server: \x1b[31mforbidden\x00\r\n\x1b[0m",
+		}},
+	}}
+	var stderr strings.Builder
+	_, _, code := loadClusterPlanWithRunner(runner, "", time.Second, "", &stderr)
+	if code != 2 {
+		t.Fatalf("code = %d, want 2; stderr = %q", code, stderr.String())
+	}
+	output := stderr.String()
+	for _, r := range output {
+		if r == '\n' || r == '\t' {
+			continue
+		}
+		if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) {
+			t.Fatalf("stderr carries the control character %U: %q", r, output)
+		}
+	}
+	for _, want := range []string{`\x1b[31m`, `\x00`, `\x0d`, `\x0a`} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("stderr = %q, want the escape %s", output, want)
+		}
+	}
+}
+
 // Source: internal/plan/plan.go lessWarning; the CLI comparator orders
 // warnings by code, then Ingress, then message.
 func TestWarningLess(t *testing.T) {

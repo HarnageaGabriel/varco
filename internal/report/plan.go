@@ -32,49 +32,45 @@ func PlanJSON(w io.Writer, result plan.Plan) error {
 }
 
 // PlanTable writes aligned plain-text plan output: one section for the cases
-// and one for each list of findings.
+// and one for each list of findings. Every cell is escaped on the way in, so
+// a finding message, an annotation value or a warning detail that carries a
+// control byte cannot reach the operator's terminal (docs/adr/0006-redaction.md).
 func PlanTable(w io.Writer, result plan.Plan) error {
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	if _, err := fmt.Fprintf(tw, "CASES %d\n", len(result.Cases)); err != nil {
-		return err
-	}
-	if len(result.Cases) != 0 {
-		if _, err := fmt.Fprintln(tw, "HOST\tMETHOD\tSCHEME\tPATH\tFAMILY\tID"); err != nil {
+	for _, row := range planRows(result) {
+		if err := writeRow(tw, row...); err != nil {
 			return err
-		}
-		for _, item := range result.Cases {
-			if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", item.Host, item.Method, item.Scheme, item.Path, item.Family, item.ID); err != nil {
-				return err
-			}
-		}
-	}
-	if _, err := fmt.Fprintf(tw, "UNSUPPORTED %d\n", len(result.Unsupported)); err != nil {
-		return err
-	}
-	if len(result.Unsupported) != 0 {
-		if _, err := fmt.Fprintln(tw, "CODE\tINGRESS\tTARGET\tMESSAGE"); err != nil {
-			return err
-		}
-		for _, finding := range result.Unsupported {
-			if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", finding.Code, finding.Ingress, findingTarget(finding), finding.Message); err != nil {
-				return err
-			}
-		}
-	}
-	if _, err := fmt.Fprintf(tw, "WARNINGS %d\n", len(result.Warnings)); err != nil {
-		return err
-	}
-	if len(result.Warnings) != 0 {
-		if _, err := fmt.Fprintln(tw, "CODE\tINGRESS\tMESSAGE"); err != nil {
-			return err
-		}
-		for _, warning := range result.Warnings {
-			if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\n", warning.Code, warning.Ingress, warning.Message); err != nil {
-				return err
-			}
 		}
 	}
 	return tw.Flush()
+}
+
+// planRows returns the rows of the plan table in order: the cases, the
+// unsupported findings and the warnings. Every section is named by its count,
+// and a section that holds no entry shows the count alone.
+func planRows(result plan.Plan) [][]string {
+	rows := [][]string{{fmt.Sprintf("CASES %d", len(result.Cases))}}
+	if len(result.Cases) != 0 {
+		rows = append(rows, []string{"HOST", "METHOD", "SCHEME", "PATH", "FAMILY", "ID"})
+		for _, item := range result.Cases {
+			rows = append(rows, []string{item.Host, item.Method, item.Scheme, item.Path, item.Family, item.ID})
+		}
+	}
+	rows = append(rows, []string{fmt.Sprintf("UNSUPPORTED %d", len(result.Unsupported))})
+	if len(result.Unsupported) != 0 {
+		rows = append(rows, []string{"CODE", "INGRESS", "TARGET", "MESSAGE"})
+		for _, finding := range result.Unsupported {
+			rows = append(rows, []string{string(finding.Code), finding.Ingress, findingTarget(finding), finding.Message})
+		}
+	}
+	rows = append(rows, []string{fmt.Sprintf("WARNINGS %d", len(result.Warnings))})
+	if len(result.Warnings) != 0 {
+		rows = append(rows, []string{"CODE", "INGRESS", "MESSAGE"})
+		for _, warning := range result.Warnings {
+			rows = append(rows, []string{string(warning.Code), warning.Ingress, warning.Message})
+		}
+	}
+	return rows
 }
 
 // findingTarget names the annotation or path a finding refers to.
