@@ -251,6 +251,7 @@ func (b *builder) run(resources []ingress.Ingress) {
 	included := make([]ingress.Ingress, 0, len(resources))
 	for _, resource := range resources {
 		if !b.matchesClass(resource) {
+			b.addWarning(b.classExclusionWarning(resource))
 			continue
 		}
 		included = append(included, resource)
@@ -680,6 +681,47 @@ func (b *builder) matchesClass(resource ingress.Ingress) bool {
 		return true
 	}
 	return resource.ClassName == b.options.IngressClass || resource.Annotations[AnnotationIngressClass] == b.options.IngressClass
+}
+
+// classExclusionWarning reports one Ingress the class filter left out of the
+// plan. The excluded resource is planned for no case at all, so this warning
+// is the only trace it ever had: without it a migration can look complete
+// while a whole Ingress was never planned.
+//
+// The warning names the Ingress as namespace/name, the class it declares and
+// the class that was requested. The regex scope of the plan is still computed
+// over the included resources only, so an excluded use-regex Ingress can still
+// change the host scope of the included ones; that is why the exclusion is
+// reported.
+//
+// Sources: docs/plan.md (Known limitations: the excluded resource is dropped
+// and the regex scope is computed over the included resources only) and ADR 0002
+// (every condition varco reports carries a stable VAR- code).
+func (b *builder) classExclusionWarning(resource ingress.Ingress) Warning {
+	return Warning{
+		Code:    diag.CodePlanIngressClassExcluded,
+		Ingress: resource.Key(),
+		Message: fmt.Sprintf("%s is excluded by --ingress-class %q: %s", resource.Key(), b.options.IngressClass, declaredClass(resource)),
+	}
+}
+
+// declaredClass describes the class an Ingress declares: spec.ingressClassName
+// first, the legacy kubernetes.io/ingress.class annotation next, and no class at
+// all when it declares none. Both sources are named when they disagree,
+// because the planner matches either one (matchesClass).
+func declaredClass(resource ingress.Ingress) string {
+	spec := resource.ClassName
+	legacy := resource.Annotations[AnnotationIngressClass]
+	switch {
+	case spec != "" && legacy != "" && spec != legacy:
+		return fmt.Sprintf("it declares class %q (spec.ingressClassName) and class %q (%s)", spec, legacy, AnnotationIngressClass)
+	case spec != "":
+		return fmt.Sprintf("it declares class %q (spec.ingressClassName)", spec)
+	case legacy != "":
+		return fmt.Sprintf("it declares class %q (%s)", legacy, AnnotationIngressClass)
+	default:
+		return "it declares no class"
+	}
 }
 
 // resourceHasTLS reports whether spec.tls covers the rule host. A spec.tls

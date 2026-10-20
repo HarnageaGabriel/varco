@@ -24,4 +24,5 @@
 | [VAR-PLAN-0008](VAR-PLAN-0008.md) | warning | No plannable HTTP path |
 | [VAR-PLAN-0009](VAR-PLAN-0009.md) | warning | Annotations ignored by profile |
 | [VAR-PLAN-0010](VAR-PLAN-0010.md) | warning | Controller ConfigMap setting |
+| [VAR-PLAN-0011](VAR-PLAN-0011.md) | warning | Ingress excluded by class filter |
 | [VAR-RUN-0001](VAR-RUN-0001.md) | error | Unsupported method |
