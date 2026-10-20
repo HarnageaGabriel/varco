@@ -25,10 +25,10 @@ stored in the repository.
 3. Push the annotated tag `v0.1.0`. Do not move or delete a published tag.
 4. Review the workflow's draft release, archives, checksums,
    `checksums.txt.sigstore.json`, SBOMs and attestations.
-5. After the draft assets exist, replace every
-   `UPDATE_FROM_RELEASE_CHECKSUMS_BEFORE_PUBLISH` value in `.krew.yaml` with
-   the corresponding hash from `checksums.txt`, then commit and publish the
-   Krew index manifest.
+5. After the draft assets exist, replace every placeholder hash value in
+   `.krew.yaml` with the corresponding hash from `checksums.txt`, then commit
+   and publish the Krew index manifest. Done for v0.1.0: every hash is filled
+   in; the Krew index submission is still pending.
 6. Publish the draft only after verification and maintainer review.
 
 ## Verify a release

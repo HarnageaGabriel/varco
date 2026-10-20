@@ -10,49 +10,46 @@ spec:
     varco derives probe cases from Kubernetes Ingress resources, sends the same
     requests to two endpoints, and reports behavior differences without
     translating manifests or modifying either endpoint.
-  caveats: |
-    Release archive hashes must be updated from v0.1.0 checksums.txt before
-    this manifest is published to a Krew index.
   platforms:
     - selector:
         matchLabels:
           os: linux
           arch: amd64
       uri: https://github.com/HarnageaGabriel/varco/releases/download/v0.1.0/varco_0.1.0_linux_amd64.tar.gz
-      sha256: UPDATE_FROM_RELEASE_CHECKSUMS_BEFORE_PUBLISH
+      sha256: 08c1e8a14e1bc07c4011aa38843eb74ca93bd23a9541b4f99bd1b3f8c11b5b0e
       bin: varco
     - selector:
         matchLabels:
           os: linux
           arch: arm64
       uri: https://github.com/HarnageaGabriel/varco/releases/download/v0.1.0/varco_0.1.0_linux_arm64.tar.gz
-      sha256: UPDATE_FROM_RELEASE_CHECKSUMS_BEFORE_PUBLISH
+      sha256: c38357941ca95c794e663230198802964ba004c6d62787db5e7e8e673fdbc553
       bin: varco
     - selector:
         matchLabels:
           os: darwin
           arch: amd64
       uri: https://github.com/HarnageaGabriel/varco/releases/download/v0.1.0/varco_0.1.0_darwin_amd64.tar.gz
-      sha256: UPDATE_FROM_RELEASE_CHECKSUMS_BEFORE_PUBLISH
+      sha256: 3dfb79079f8cbb8409b4afbd62e204c14988cad09da2d453490ac3e660982ceb
       bin: varco
     - selector:
         matchLabels:
           os: darwin
           arch: arm64
       uri: https://github.com/HarnageaGabriel/varco/releases/download/v0.1.0/varco_0.1.0_darwin_arm64.tar.gz
-      sha256: UPDATE_FROM_RELEASE_CHECKSUMS_BEFORE_PUBLISH
+      sha256: 99481c478c78b9a504ee91e8a122a59c1d01b45688b9d31c7eb50b0bef476bce
       bin: varco
     - selector:
         matchLabels:
           os: windows
           arch: amd64
       uri: https://github.com/HarnageaGabriel/varco/releases/download/v0.1.0/varco_0.1.0_windows_amd64.zip
-      sha256: UPDATE_FROM_RELEASE_CHECKSUMS_BEFORE_PUBLISH
+      sha256: 6c83b82df91efaac78f7bd4a2421e4b42e3466b795335577f0b465bbf5f50976
       bin: varco.exe
     - selector:
         matchLabels:
           os: windows
           arch: arm64
       uri: https://github.com/HarnageaGabriel/varco/releases/download/v0.1.0/varco_0.1.0_windows_arm64.zip
-      sha256: UPDATE_FROM_RELEASE_CHECKSUMS_BEFORE_PUBLISH
+      sha256: bc7396dae7b9ae4ed76c4b67311a67931cac6b09ee2e527d4667e26b5fc46c4b
       bin: varco.exe

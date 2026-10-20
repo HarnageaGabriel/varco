@@ -52,9 +52,10 @@ answers.
 
 ## Try it now: compare one route on two endpoints
 
-Build the binary from a checkout
-([Getting started](#getting-started); nothing is published yet), then compare a
-single route. No cluster access is needed:
+Download the archive for your platform from the
+[release page](https://github.com/HarnageaGabriel/varco/releases/tag/v0.1.0)
+and verify it per [install.md](docs/install.md), or build the binary from a
+checkout, then compare a single route. No cluster access is needed:
 
 ```sh
 varco diff --old 10.0.0.1 --new 10.0.0.2 --host api.example.com /
@@ -114,16 +115,18 @@ marked with their exception id. Sensitive values are redacted by default.
 
 ## Status
 
-varco is **pre-alpha**. Nothing is released yet.
+varco is **pre-alpha**. `v0.1.0` is published as a
+[pre-release](https://github.com/HarnageaGabriel/varco/releases/tag/v0.1.0)
+and is not marked latest. It is not yet on Homebrew or Krew.
 
 | Command | State |
 |---|---|
 | `varco diff` | Implemented: status, `Location`, security and CORS headers, TLS version, certificate and body hash across two endpoints. |
 | `varco plan` | Implemented: reads Ingress manifests or a live cluster (`--from-cluster`, `kubectl get` only) and generates deterministic test cases plus unsupported findings. Planner profiles `nginx` and `generic` per [ADR 0008](docs/adr/0008-planner-profiles.md). |
 | `varco run` | Implemented: plan execution against two endpoints with a verdict per [ADR 0007](docs/adr/0007-verdict-model.md), exceptions file, per-case outcome with coverage, repeated observations (`--repeat`), body policy (`--body`), request budget (`--max-requests`), family/path filters, `--dry-run`, `--suggest-exceptions`, deterministic explanations, redaction per [ADR 0006](docs/adr/0006-redaction.md). |
-| Releases | A release workflow produces draft releases from `v0.1.0`; no version is published yet. |
+| Releases | `v0.1.0` is published as a pre-alpha [pre-release](https://github.com/HarnageaGabriel/varco/releases/tag/v0.1.0) with checksums, per-archive SBOMs, a Sigstore bundle and a build attestation; download and verification in [install.md](docs/install.md). Not on Homebrew or Krew yet. |
 
-The output formats and flags can still change before the first release.
+The output formats and flags can still change between releases.
 
 ## How it works
 
@@ -169,9 +172,10 @@ accepted differences in `varco run`; see [run.md](docs/run.md).
 
 ## Getting started
 
-See [install.md](docs/install.md) for the planned release downloads and
-verification. Nothing is published yet (pre-alpha), so install from a source
-checkout; requires Go 1.26 or newer:
+`v0.1.0` is published as a pre-alpha
+[pre-release](https://github.com/HarnageaGabriel/varco/releases/tag/v0.1.0);
+download and verify it per [install.md](docs/install.md). Building from a
+source checkout instead requires Go 1.26 or newer:
 
 ```sh
 git clone https://github.com/HarnageaGabriel/varco.git
@@ -180,8 +184,8 @@ make build        # writes bin/varco
 make test lint
 ```
 
-When the first version is tagged, the release workflow publishes draft
-releases; they become downloadable once published.
+Later tags follow the same [release process](docs/release-process.md); Homebrew
+and Krew are not available yet.
 
 Usage details and examples are in [usage.md](docs/usage.md).
 
@@ -208,7 +212,10 @@ for example a 401 or a redirect to a login page.
 - **No telemetry.** varco contacts only the endpoints you name; no external service, no metrics.
 - **Reporting.** Vulnerabilities go through the process in [SECURITY.md](SECURITY.md).
 
-The release workflow produces draft releases from `v0.1.0` (goreleaser with checksums, SBOMs and cosign signatures). Nothing is published yet.
+`v0.1.0` is published as a pre-alpha pre-release: GoReleaser archives with
+per-archive SBOMs, `checksums.txt` covered by a Sigstore bundle and a GitHub
+build attestation. Verify downloads per [install.md](docs/install.md).
+Homebrew and Krew are not available yet.
 
 ## Community
 
