@@ -78,6 +78,42 @@ Krew resolves the plugin name from `metadata.name: varco`. The manifest's
 `bin` must point to the archive's `varco` executable (`varco.exe` on Windows);
 GoReleaser ships that binary, after which Krew exposes it as `kubectl varco`.
 
+## Rebuild a release and compare hashes
+
+Every release from the next one on (`v0.1.2`) can be rebuilt bit for bit: the
+release binaries carry the commit metadata, not the build time. `v0.1.0` and
+`v0.1.1` stamped the build time into the binary, so they cannot be reproduced
+bit for bit; a rebuild of those two differs in that field and in the Go build
+ID that follows from it.
+
+To rebuild a release and compare the hashes:
+
+```sh
+set -euo pipefail
+
+version=v0.1.2
+tag=v0.1.2
+archive=varco_0.1.2_linux_amd64.tar.gz
+base=https://github.com/HarnageaGabriel/varco/releases/download/$version
+mkdir -p /tmp/varco-release
+curl -fLo "/tmp/varco-release/$archive" "$base/$archive"
+
+git clone https://github.com/HarnageaGabriel/varco.git
+cd varco
+git checkout "$tag"
+
+sh scripts/verify-reproducible.sh "/tmp/varco-release/$archive"
+```
+
+The script prints the SHA-256 of the released binary and of the rebuild and
+reports whether they are identical. It needs `git`, the Go toolchain of the
+release (the Go version of `go.mod`, Go 1.26 or newer) and a SHA-256 tool: a
+different toolchain produces a different binary. Use the same archive name
+(`varco_VERSION_os_arch.tar.gz`, `.zip` on Windows) as the one you
+downloaded. The repository keeps the line endings of its files at LF
+(`.gitattributes`), so a clone has the same bytes as the release; a checkout
+with CRLF line endings produces a different binary.
+
 ## Build from source
 
 Requires Go 1.26 or newer:
