@@ -250,6 +250,11 @@ difference outranks missing data: `1` wins over `3`. See
 [exit-codes.md](docs/exit-codes.md) and the verdict model in
 [ADR 0007](docs/adr/0007-verdict-model.md).
 
+**What does a green verdict not prove?**
+`EQUIVALENT` covers only the planned cases, the declared hosts and paths, and
+anonymous requests - what it does not cover is listed in
+[limitations.md](docs/limitations.md).
+
 **Does it read the controller ConfigMap?**
 Yes, optionally: with `--from-cluster` varco reads the ingress-nginx
 controller ConfigMap with `kubectl get` and warns about settings that change
@@ -269,6 +274,7 @@ where the test cases come from.
 - [Command reference](docs/reference/README.md)
 - [Plan: case families and findings](docs/plan.md)
 - [Run: flags, exceptions and the report](docs/run.md)
+- [Limitations: what a verdict does not prove](docs/limitations.md)
 - [JSON Schemas](docs/schema/README.md)
 - [CI: varco in a migration pipeline](docs/ci.md)
 - [Troubleshooting](docs/troubleshooting.md)
