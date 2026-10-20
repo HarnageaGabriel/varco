@@ -95,3 +95,33 @@ sorted and de-duplicated. Planning is pure and never reads the clock.
   declared routes.
 - Adding a family means adding a constant, a row in `docs/plan.md`, and an entry
   in the golden corpus under `testdata/plan`.
+
+## Host-variant and head families (appended 2026-10-20)
+
+Two families were added so that host matching and HEAD handling become visible
+in a plan without guesswork:
+
+- `host-variant` sends the same request target as the `base` case with a
+  modified `Host` header: the host upper-cased, the host with a trailing dot
+  (`example.com.`), and the host with the explicit default port for the case
+  scheme (`example.com:443` over https, `example.com:80` over http). Sources:
+  RFC 3986 section 3.2.2 (the host is case-insensitive) and RFC 9110 section 7.2
+  (the `Host` header may carry the port).
+- `head` sends one `HEAD` request instead of `GET` on the same target (RFC 9110
+  section 9.3.2). HEAD is one of the default safe methods.
+
+Both families are emitted for every concrete declared host on that host's first
+planned path, and both the `nginx` and the `generic` profiles emit them: host
+matching and HEAD handling are portable HTTP behaviors, not ingress-nginx
+annotations (ADR 0008). Hosts substituted from a wildcard label or filled in
+from `--default-host` are skipped - for those, a host-variant difference would
+probe varco's substitution instead of a declared host. SNI stays the plain host,
+so only the `Host` header differs on the wire. Like every family, these cases
+probe and assert nothing about which behavior is right: equivalence between old
+and new is what is compared.
+
+On the probe side, the planner may carry exactly one `Host` header override per
+request, and the prober now accepts exactly one such override, validates it like
+a case host (rejecting an empty value, duplicate or multi-valued `Host` headers),
+and writes it as the request's only `Host` line. `varco diff --header` still
+forbids `Host`: setting it by hand remains reserved for planned cases.

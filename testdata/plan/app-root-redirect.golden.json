@@ -102,6 +102,72 @@
       "note": "pathType ImplementationSpecific is treated as a Prefix-like match"
     },
     {
+      "id": "8d442937b4fe",
+      "host": "www.example.org",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/landing",
+      "headers": [
+        {
+          "name": "Host",
+          "values": [
+            "www.example.org."
+          ]
+        }
+      ],
+      "family": "host-variant",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the trailing dot is the fully-qualified form of the host; SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
+    },
+    {
+      "id": "d7e9e48b724e",
+      "host": "www.example.org",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/landing",
+      "headers": [
+        {
+          "name": "Host",
+          "values": [
+            "WWW.EXAMPLE.ORG"
+          ]
+        }
+      ],
+      "family": "host-variant",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the host is case-insensitive (RFC 3986 section 3.2.2); SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
+    },
+    {
+      "id": "f9a5509def9a",
+      "host": "www.example.org",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/landing",
+      "headers": [
+        {
+          "name": "Host",
+          "values": [
+            "www.example.org:80"
+          ]
+        }
+      ],
+      "family": "host-variant",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "the Host header may carry the port (RFC 9110 section 7.2), and this is its explicit default; SNI stays the plain host, so only the Host header differs; the comparison shows whether old and new are equivalent and asserts nothing about which behavior is right"
+    },
+    {
       "id": "a0f86af7104b",
       "host": "www.example.org",
       "scheme": "http",
@@ -115,6 +181,20 @@
         "annotation": "nginx.ingress.kubernetes.io/permanent-redirect"
       },
       "note": "permanent-redirect answers with a redirect (expected code 301); pathType ImplementationSpecific is treated as a Prefix-like match"
+    },
+    {
+      "id": "23a6c43ba277",
+      "host": "www.example.org",
+      "scheme": "http",
+      "method": "HEAD",
+      "path": "/landing",
+      "family": "head",
+      "source": {
+        "ingress": "varco",
+        "rule": 0,
+        "path": 0
+      },
+      "note": "HEAD on the first planned path; the comparison shows only whether old and new handle HEAD equivalently (RFC 9110 section 9.3.2)"
     },
     {
       "id": "ff62ad603a38",
