@@ -4,9 +4,28 @@ All notable changes are documented here. Format: [Keep a Changelog](https://keep
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-20
+
+Security and hardening release. It fixes a credential leak in error messages that affects `v0.1.0`; upgrading is recommended.
+
+### Security
+
+- Fix `redact.Text` leaking credentials: a URL that was quoted or prefixed inside a message (for example kubectl's `Get "https://user:password@host/...": dial tcp ...` for a kubeconfig whose server URL embeds userinfo) kept its password and query tokens in stderr, CI logs and report error strings. URLs are now redacted at any offset in a message (ADR 0006).
+- Validate the TLS SNI of planned cases before it goes on the wire (`VAR-CFG-0001`, value never echoed); hosts with underscores keep working.
+- Cap the `--plan` and `--exceptions` reads at 8 MiB like manifests (`VAR-PLAN-0003`, `VAR-CFG-0002`), validate every case of a plan document at load (host, path, headers, control bytes in text fields, including unsupported findings and warnings), and create the `--output` report file with mode `0600`.
+- Document in `SECURITY.md` that `--from-cluster` runs the `kubectl` found on `PATH` with the user's privileges, `get` verb only.
+
+### Fixed
+
+- Serialize the `varco run` progress callback: workers called it concurrently, a data race for any writer that is not thread-safe.
+- Report a failing `Close` of the `--output` and `--suggest-exceptions` files instead of claiming success (exit 4), and stop ignoring the error of the diagnostic registry in the CLI.
+
 ### Added
 
-- Add the `host-variant` and `head` case families to `varco plan` (emitted by both the `nginx` and `generic` profiles, for every concrete declared host on its first planned path, SNI kept plain): `Host` header variants per RFC 3986 section 3.2.2 and RFC 9110 section 7.2 and one `HEAD` case per RFC 9110 section 9.3.2 (ADR 0005, docs/plan.md). The probe now accepts exactly one validated `Host` header override planned per request; `varco diff --header` still forbids `Host`.
+- Add the `host-variant` and `head` case families to `varco plan` (emitted by both the `nginx` and `generic` profiles, for every concrete declared host on its first planned path, SNI kept plain): `Host` header variants (upper-cased, trailing dot, explicit default port) and one `HEAD` request. The prober accepts exactly one validated `Host` override per planned request; `varco diff --header` still forbids `Host`.
+- Publish JSON Schemas for `varco plan --format json` and `varco run --format json` in `docs/schema/`, validated against all JSON goldens in CI.
+- Add guides: a cutover cookbook, a troubleshooting page keyed by `VAR-` codes, and a GitHub Actions example that downloads and verifies the release before use.
+- Add an in-process end-to-end test suite for `varco run`, fuzz targets for the plan loader and the kubectl JSON decoders, benchmarks (`make bench`), and a coverage floor for `internal/kube`.
 
 ## [0.1.0] - 2026-10-20
 
@@ -42,5 +61,6 @@ The first pre-alpha release of varco; command output formats, JSON schemas and f
 - Harden `varco diff` request handling: request targets are sent verbatim (no re-escaping of `%2F`, `?`, `//`), probes ignore proxies, do not decompress, accept TLS 1.0+, hash the whole body, and refuse CR/LF/control bytes, invalid header names/values, `Host`/`Content-Length`/`Transfer-Encoding`/`Trailer`/`Connection` headers and more credential headers (`X-Api-Key`, `X-Auth-Token`, `Private-Token`, `Api-Key`).
 - Harden `varco diff` response probing: cap header blocks at 64 KiB, skip up to eight informational responses, capture trailers, default non-positive probe timeouts to 10 seconds, and cap body hashing at a configurable 256 MiB default. SNI now defaults without the Host port and rejects port-bearing values; invalid paths are redacted in errors, and cancellation takes precedence over probe failures.
 
-[Unreleased]: https://github.com/HarnageaGabriel/varco/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/HarnageaGabriel/varco/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/HarnageaGabriel/varco/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/HarnageaGabriel/varco/releases/tag/v0.1.0
