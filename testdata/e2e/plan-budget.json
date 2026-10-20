@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "profile": "nginx",
+  "cases": [
+    {
+      "id": "dddddddddddd",
+      "host": "app.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/",
+      "family": "base",
+      "source": {
+        "ingress": "e2e/spec",
+        "rule": 0,
+        "path": 0
+      }
+    },
+    {
+      "id": "eeeeeeeeeeee",
+      "host": "app.example.com",
+      "scheme": "http",
+      "method": "GET",
+      "path": "/budgeted",
+      "family": "base",
+      "source": {
+        "ingress": "e2e/spec",
+        "rule": 0,
+        "path": 1
+      }
+    }
+  ],
+  "unsupported": [],
+  "warnings": []
+}
