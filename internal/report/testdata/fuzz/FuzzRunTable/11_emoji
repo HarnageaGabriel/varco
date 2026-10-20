@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("api.example.com\U0001F389\x1f/cb\x1fcase-1\x1fbase\x1ftext/plain\x1fapplication/json\x1f/cb?code=old-secret\x1f/cb?code=new-secret\x1fVAR-NET-0001: probe refused\x1fCN=old\x1fCN=new\x1fsession\x1f\U0001F389\U0001F469\u200d\U0001F4BB the ingress rewrites the path\x1ftimeouts are not observable\x1fserver-header\x1fcontent-length")
