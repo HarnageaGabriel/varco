@@ -106,7 +106,7 @@ The areas in use today, with the next free number in each:
 | `NET` | connectivity | `VAR-NET-0001` | `VAR-NET-0002` |
 | `RUN` | run and policy | `VAR-RUN-0001` | `VAR-RUN-0002` |
 | `CMP` | comparison results | `VAR-CMP-0001` .. `VAR-CMP-0007` | `VAR-CMP-0008` |
-| `PLAN` | planning | `VAR-PLAN-0001` .. `VAR-PLAN-0010` | `VAR-PLAN-0011` |
+| `PLAN` | planning | `VAR-PLAN-0001` .. `VAR-PLAN-0011` | `VAR-PLAN-0012` |
 | `TLS` | reserved, no code yet | - | `VAR-TLS-0001` |
 | `RPT` | reserved, no code yet | - | `VAR-RPT-0001` |
 
@@ -245,7 +245,7 @@ CI runs `make docs-check` in the `Supply-chain checks` job, so a code that was
 registered but not regenerated fails the pull request with
 
 ```
-generated docs out of date (run `make docs`): VAR-PLAN-0011.md
+generated docs out of date (run `make docs`): VAR-PLAN-0012.md
 ```
 
 After `make docs`, read the diff. The generated page must match the
