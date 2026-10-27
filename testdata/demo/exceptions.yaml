@@ -1,0 +1,20 @@
+version: 1
+exceptions:
+  - id: demo-trailing-slash-status
+    reason: "The replacement intentionally serves /app without redirecting"
+    match:
+      host: demo.example.com
+      path: /app
+      field: status
+  - id: demo-trailing-slash-location
+    reason: "The replacement intentionally omits the ingress-nginx redirect"
+    match:
+      host: demo.example.com
+      path: /app
+      field: location
+  - id: demo-case-sensitive
+    reason: "The replacement intentionally matches paths case-sensitively"
+    match:
+      host: demo.example.com
+      family: case-flip
+      field: status

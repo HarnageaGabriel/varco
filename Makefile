@@ -1,4 +1,4 @@
-.PHONY: build test bench fuzz lint vuln cover tidy fmt docs docs-check release-check
+.PHONY: build test bench fuzz lint vuln cover tidy fmt docs docs-check demo release-check
 
 build:
 	go build -trimpath ./...
@@ -32,6 +32,9 @@ docs:
 
 docs-check:
 	go run ./tools/docsgen -out docs/diagnostics -reference-out docs/reference -check
+
+demo:
+	go run ./tools/demo
 
 release-check:
 	@if command -v goreleaser >/dev/null 2>&1; then \

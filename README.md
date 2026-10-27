@@ -70,6 +70,8 @@ varco run --plan plan.json --old 10.0.0.1 --new 10.0.0.2 --dry-run
 varco run --plan plan.json --old 10.0.0.1 --new 10.0.0.2
 ```
 
+For a 60-second local walkthrough with no cluster, run `make demo`; see [the demo](docs/demo.md).
+
 Exit status 0 means the two endpoints answered identically (EQUIVALENT), 1
 means at least one difference was not accepted by policy (DIFFERENT), 2 is a
 usage or configuration error, 3 means a case could not be observed
@@ -269,6 +271,7 @@ where the test cases come from.
 
 ## Documentation
 
+- [60-second no-cluster demo](docs/demo.md)
 - [Usage](docs/usage.md)
 - [Cookbook: cutover rehearsal](docs/cookbook.md)
 - [Command reference](docs/reference/README.md)
