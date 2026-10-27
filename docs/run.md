@@ -149,6 +149,33 @@ exceptions:
 An accepted difference is never removed: it stays in the report marked
 `accepted`, with the reason and the exception id.
 
+When multiple exceptions match one difference, the first non-expired matching
+exception in file order wins. Order therefore matters: put narrow exceptions
+before broad ones. For example, with a `status` difference on
+`api.example.com`, this file accepts it with `broad-host` because that entry is
+first, even though `narrow-api` is more specific:
+
+```yaml
+version: 1
+exceptions:
+  - id: broad-host
+    reason: 'all example hosts use the shared status policy'
+    match:
+      host: '*.example.com'
+      field: status
+  - id: narrow-api
+    reason: 'api has a dedicated status policy'
+    match:
+      host: api.example.com
+      field: status
+```
+
+The report shows `accepted (broad-host): all example hosts use the shared
+status policy` for that difference. Put `narrow-api` first when its reason
+should be reported instead. An expired exception does not match; its id is
+listed in `expired_exceptions` (or `EXPIRED EXCEPTIONS` in the table), and the
+next live matching exception can accept the difference.
+
 ### `match.field` reference
 
 `field` matches the comparator's field name exactly, and these documented

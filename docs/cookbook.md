@@ -303,6 +303,10 @@ exceptions:
   `location`, `cookie`, `set-cookie`, `tls-version`, `certificate` and
   `header:<Name>`.
 
+If two entries match the same difference, the first non-expired match in file
+order supplies the report id and reason. Put narrow exceptions before broad
+host globs; expired entries are skipped and listed under `EXPIRED EXCEPTIONS`.
+
 Then run with it:
 
 ```sh
