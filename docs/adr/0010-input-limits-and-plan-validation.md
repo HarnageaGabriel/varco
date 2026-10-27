@@ -162,3 +162,10 @@ not produce.
   findings and the warnings.
 - `feat: verdict model, YAML limits, coverage floors (M2.5)` - the depth and
   node limits of a YAML document.
+
+## Update: bounded certificate capture
+
+Probe results retain at most 1,024 bytes each for the leaf subject and issuer,
+64 DNS SANs, and 253 bytes per SAN. Truncated text ends with `...`; when SANs
+are omitted, a final `...+N more` entry records the count. The certificate
+fingerprint continues to cover the complete raw leaf certificate.
