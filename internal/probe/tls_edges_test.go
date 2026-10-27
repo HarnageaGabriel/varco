@@ -28,6 +28,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/HarnageaGabriel/varco/internal/diag"
 	"github.com/HarnageaGabriel/varco/internal/result"
@@ -52,9 +53,7 @@ const (
 	// error line, so anything beyond this limit is a leak.
 	probeErrorLimit = 512
 	// certificateMessageLimit is the size limit of a TLS certificate message
-	// in crypto/tls (common.go: maxHandshakeCertificateMsg = 262144). It is
-	// the only bound that applies to the captured certificate: the prober
-	// itself applies none (internal/probe/probe.go, capture).
+	// in crypto/tls (common.go: maxHandshakeCertificateMsg = 262144).
 	certificateMessageLimit = 256 * 1024
 )
 
@@ -700,18 +699,15 @@ func TestHandshakeFailureDiagnosticCodeIsDocumented(t *testing.T) {
 	}
 }
 
-// Source: internal/probe/probe.go copies the subject and every SAN of the leaf
-// into the result. A CommonName with control bytes and a long SAN list are
-// captured as they are, without a panic and without a bound of the prober's
-// own: the only limit is the TLS certificate message size of crypto/tls
-// (common.go: maxHandshakeCertificateMsg = 262144). The report layer escapes
-// the control bytes (internal/report/escape.go).
+// Source: internal/probe/probe.go bounds the captured subject, issuer and SAN
+// list. Control bytes within a bounded subject are still captured; the report
+// layer escapes them (internal/report/escape.go).
 func TestDoCapturesHostileCertificateFields(t *testing.T) {
 	ctx := probeContext(t)
 	commonName := "hostile\nname\t\x00end"
-	names := make([]string, 0, 256)
-	for i := 0; i < 256; i++ {
-		names = append(names, fmt.Sprintf("host-%03d.example.com", i))
+	names := make([]string, 0, 1000)
+	for i := 0; i < 1000; i++ {
+		names = append(names, fmt.Sprintf("host-%03d.example.com", 999-i))
 	}
 	certificate, leaf := newTLSCertificate(t, tlsCertificateSpec{
 		commonName: commonName,
@@ -739,19 +735,96 @@ func TestDoCapturesHostileCertificateFields(t *testing.T) {
 			t.Fatalf("the captured subject drops the control byte %q: %q", control, got.Certificate.Subject)
 		}
 	}
-	want := slices.Clone(leaf.DNSNames)
-	slices.Sort(want)
+	want := append(slices.Clone(leaf.DNSNames[:maxCertificateDNSNames]), fmt.Sprintf("%s+936 more", certificateCutMarker))
 	if !slices.Equal(got.Certificate.DNSNames, want) {
-		t.Fatalf("dns sans = %d entries, want %d", len(got.Certificate.DNSNames), len(want))
+		t.Fatalf("dns sans = %q, want %q", got.Certificate.DNSNames, want)
 	}
-	if len(got.Certificate.DNSNames) != len(names) {
-		t.Fatalf("dns sans = %d entries, want %d", len(got.Certificate.DNSNames), len(names))
+	if len(got.Certificate.DNSNames) != maxCertificateDNSNames+1 {
+		t.Fatalf("dns sans = %d entries, want %d", len(got.Certificate.DNSNames), maxCertificateDNSNames+1)
 	}
-	captured := len(got.Certificate.Subject)
-	for _, name := range got.Certificate.DNSNames {
-		captured += len(name)
+	for _, name := range got.Certificate.DNSNames[:maxCertificateDNSNames] {
+		if len(name) > maxCertificateDNSNameBytes {
+			t.Fatalf("captured SAN is %d bytes, want at most %d", len(name), maxCertificateDNSNameBytes)
+		}
 	}
-	if captured > certificateMessageLimit {
-		t.Fatalf("the captured certificate fields are %d bytes, more than the TLS certificate message limit", captured)
+	fingerprint := sha256.Sum256(leaf.Raw)
+	if got.Certificate.Fingerprint != hex.EncodeToString(fingerprint[:]) {
+		t.Fatalf("fingerprint = %q, want the hash of the full certificate", got.Certificate.Fingerprint)
+	}
+}
+
+func TestTruncateCertificateText(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{name: "exactly at limit", value: strings.Repeat("a", maxCertificateSubjectBytes), want: strings.Repeat("a", maxCertificateSubjectBytes)},
+		{name: "one byte over", value: strings.Repeat("a", maxCertificateSubjectBytes+1), want: strings.Repeat("a", maxCertificateSubjectBytes-len(certificateCutMarker)) + certificateCutMarker},
+		{name: "multibyte rune straddles cut", value: strings.Repeat("a", maxCertificateSubjectBytes-len(certificateCutMarker)-1) + "€zz", want: strings.Repeat("a", maxCertificateSubjectBytes-len(certificateCutMarker)-1) + certificateCutMarker},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := truncateCertificateText(test.value, maxCertificateSubjectBytes)
+			if got != test.want {
+				t.Fatalf("truncated value = %q, want %q", got, test.want)
+			}
+			if len(got) > maxCertificateSubjectBytes {
+				t.Fatalf("truncated value is %d bytes, want at most %d", len(got), maxCertificateSubjectBytes)
+			}
+			if !utf8.ValidString(got) {
+				t.Fatalf("truncated value is not valid UTF-8: %q", got)
+			}
+		})
+	}
+}
+
+func TestCaptureCertificateBoundsNames(t *testing.T) {
+	certificate := captureCertificate(&x509.Certificate{
+		Raw:          []byte("bounded names"),
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: strings.Repeat("s", maxCertificateSubjectBytes+100)},
+		Issuer:       pkix.Name{CommonName: strings.Repeat("i", maxCertificateIssuerBytes+100)},
+		DNSNames: []string{
+			strings.Repeat("d", maxCertificateDNSNameBytes),
+			strings.Repeat("e", 5000),
+		},
+	})
+	if len(certificate.Subject) > maxCertificateSubjectBytes || !strings.HasSuffix(certificate.Subject, certificateCutMarker) {
+		t.Fatalf("subject = %q", certificate.Subject)
+	}
+	if len(certificate.Issuer) > maxCertificateIssuerBytes || !strings.HasSuffix(certificate.Issuer, certificateCutMarker) {
+		t.Fatalf("issuer = %q", certificate.Issuer)
+	}
+	if len(certificate.DNSNames[0]) != maxCertificateDNSNameBytes {
+		t.Fatalf("exact-limit SAN is %d bytes, want %d", len(certificate.DNSNames[0]), maxCertificateDNSNameBytes)
+	}
+	if len(certificate.DNSNames[1]) > maxCertificateDNSNameBytes || !strings.HasSuffix(certificate.DNSNames[1], certificateCutMarker) {
+		t.Fatalf("long SAN is %d bytes and ends in %q", len(certificate.DNSNames[1]), certificate.DNSNames[1][len(certificate.DNSNames[1])-3:])
+	}
+}
+
+func TestCaptureCertificateFingerprintUsesFullRawCertificate(t *testing.T) {
+	rawA := []byte(strings.Repeat("r", 2000))
+	rawB := slices.Clone(rawA)
+	rawB[len(rawB)-1] = 's'
+	leaf := func(raw []byte) *x509.Certificate {
+		return &x509.Certificate{
+			Raw:          raw,
+			SerialNumber: big.NewInt(1),
+			Subject:      pkix.Name{CommonName: strings.Repeat("n", maxCertificateSubjectBytes+100)},
+		}
+	}
+	capturedA := captureCertificate(leaf(rawA))
+	capturedB := captureCertificate(leaf(rawB))
+	if capturedA.Subject != capturedB.Subject {
+		t.Fatalf("equally truncated subjects differ: %q != %q", capturedA.Subject, capturedB.Subject)
+	}
+	wantA := sha256.Sum256(rawA)
+	if capturedA.Fingerprint != hex.EncodeToString(wantA[:]) {
+		t.Fatalf("fingerprint = %q, want full-certificate hash %q", capturedA.Fingerprint, hex.EncodeToString(wantA[:]))
+	}
+	if capturedA.Fingerprint == capturedB.Fingerprint {
+		t.Fatal("certificates differing after the captured fields have equal fingerprints")
 	}
 }
