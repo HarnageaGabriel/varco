@@ -29,3 +29,6 @@ with `--from-cluster`. That process runs with the privileges of the user who
 started `varco`, and `varco` only ever passes the `get` verb to it. Make sure
 the `kubectl` on `PATH` is the one you trust, because it acts on your cluster
 with your credentials.
+
+The threat model of the tool - what it trusts, what it defends and what it
+does not - is in [docs/threat-model.md](docs/threat-model.md).

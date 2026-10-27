@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/HarnageaGabriel/varco/internal/diag"
 	"github.com/HarnageaGabriel/varco/internal/ingress"
 	"github.com/HarnageaGabriel/varco/internal/plan"
 )
@@ -594,6 +595,84 @@ func TestPlanJSONIsIdenticalInEveryInputOrder(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// classFilterResources returns the corpus of the class-filter determinism
+// test: four Ingress resources of three classes. Two of them are kept by the
+// class filter (one declares its class in spec.ingressClassName, one in the
+// legacy kubernetes.io/ingress.class annotation) and two of them are excluded
+// (one declares another class, one declares no class at all).
+//
+// Sources: docs/plan.md (the --ingress-class flag matches spec.ingressClassName
+// or the kubernetes.io/ingress.class annotation) and internal/plan/generate.go
+// (matchesClass).
+func classFilterResources() []ingress.Ingress {
+	return []ingress.Ingress{
+		{
+			APIVersion: ingress.APIVersion, Kind: ingress.KindIngress,
+			Namespace: "prod", Name: "checkout", ClassName: "nginx",
+			Rules: []ingress.Rule{{Host: "api.example.com", Paths: []ingress.Path{{Path: "/api", PathType: "Prefix"}}}},
+		},
+		{
+			APIVersion: ingress.APIVersion, Kind: ingress.KindIngress,
+			Namespace: "prod", Name: "legacy", ClassName: "nginx",
+			Annotations: map[string]string{"kubernetes.io/ingress.class": "nginx"},
+			Rules:       []ingress.Rule{{Host: "legacy.example.com", Paths: []ingress.Path{{Path: "/legacy", PathType: "Prefix"}}}},
+		},
+		{
+			APIVersion: ingress.APIVersion, Kind: ingress.KindIngress,
+			Namespace: "prod", Name: "other", ClassName: "traefik",
+			Rules: []ingress.Rule{{Host: "other.example.com", Paths: []ingress.Path{{Path: "/other", PathType: "Prefix"}}}},
+		},
+		{
+			APIVersion: ingress.APIVersion, Kind: ingress.KindIngress,
+			Namespace: "dev", Name: "classless",
+			Rules: []ingress.Rule{{Host: "classless.example.com", Paths: []ingress.Path{{Path: "/classless", PathType: "Prefix"}}}},
+		},
+	}
+}
+
+// TestClassExclusionWarningsAreIndependentOfInputOrder proves that the
+// VAR-PLAN-0011 warnings of the excluded Ingresses do not depend on the order
+// of the input resources: the plan sorts the warnings by code, Ingress and
+// message (internal/plan/plan.go, finalizeWarnings), so the same resources in
+// any order exclude the same Ingresses and report them in the same order.
+//
+// Sources: CONVENTIONS.md ("Same input, same output"), docs/plan.md
+// ("Determinism guarantees") and docs/adr/0005-plan-case-families.md
+// ("Determinism is part of the contract").
+func TestClassExclusionWarningsAreIndependentOfInputOrder(t *testing.T) {
+	corpus := classFilterResources()
+	options := []plan.Options{
+		{IngressClass: "nginx", Profile: plan.ProfileNginx},
+		{IngressClass: "nginx", Profile: plan.ProfileGeneric},
+	}
+	for _, option := range options {
+		t.Run(option.Profile, func(t *testing.T) {
+			baseline := renderPlan(t, plan.Build(corpus, option))
+			rng := rand.New(rand.NewSource(determinismSeed))
+			for shuffle := 1; shuffle <= determinismShuffles; shuffle++ {
+				shuffled := shuffledResources(corpus, rng)
+				full := renderPlan(t, plan.Build(shuffled, option))
+				if !bytes.Equal(full, baseline) {
+					t.Fatalf("shuffle %d: the rendered plan changed, first difference at byte %d", shuffle, firstDifference(baseline, full))
+				}
+			}
+			reversed := renderPlan(t, plan.Build(reversedResources(corpus), option))
+			if !bytes.Equal(reversed, baseline) {
+				t.Fatalf("the rendered plan changed between two input orders, first difference at byte %d", firstDifference(baseline, reversed))
+			}
+			excluded := 0
+			for _, warning := range plan.Build(corpus, option).Warnings {
+				if warning.Code == diag.CodePlanIngressClassExcluded {
+					excluded++
+				}
+			}
+			if excluded != 2 {
+				t.Fatalf("exclusion warnings = %d, want one for each excluded Ingress", excluded)
+			}
+		})
 	}
 }
 

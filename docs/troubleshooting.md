@@ -91,6 +91,9 @@ The two usual mistakes are a typo in a key name (an unknown key is an
 error, not a warning) and a date in another format. The message names the
 offending exception.
 
+When matches overlap, the first non-expired matching exception in file order
+supplies the report id and reason; put narrow entries first.
+
 See [VAR-CFG-0002](diagnostics/VAR-CFG-0002.md) for the code page.
 
 ## VAR-PLAN-0003: Manifest parse error

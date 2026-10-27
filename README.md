@@ -278,6 +278,7 @@ where the test cases come from.
 - [Plan: case families and findings](docs/plan.md)
 - [Run: flags, exceptions and the report](docs/run.md)
 - [Limitations: what a verdict does not prove](docs/limitations.md)
+- [Threat model](docs/threat-model.md)
 - [JSON Schemas](docs/schema/README.md)
 - [CI: varco in a migration pipeline](docs/ci.md)
 - [Troubleshooting](docs/troubleshooting.md)
