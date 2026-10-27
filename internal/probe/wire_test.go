@@ -461,3 +461,62 @@ func TestValidators(t *testing.T) {
 		t.Fatal("SNI validation")
 	}
 }
+
+// Source: internal/probe/probe.go ValidWireSNI; the names a probe may send as
+// its TLS server name: letters, digits, hyphen, underscore and dot labels, an
+// IP literal or nothing at all. Everything that could change the structure of
+// the request is refused.
+func TestValidWireSNI(t *testing.T) {
+	tests := []struct {
+		name   string
+		sni    string
+		accept bool
+	}{
+		{name: "empty", sni: "", accept: true},
+		{name: "plain host", sni: "api.example.com", accept: true},
+		{name: "underscore label", sni: "my_app.example.com", accept: true},
+		{name: "trailing dot", sni: "api.example.com.", accept: true},
+		{name: "ip literal", sni: "127.0.0.1", accept: true},
+		{name: "ipv6 literal", sni: "::1", accept: true},
+		{name: "253 bytes", sni: strings.Repeat("a", 253), accept: true},
+		{name: "space", sni: "api example.com"},
+		{name: "nul byte", sni: "api\x00.example.com"},
+		{name: "colon", sni: "api.example.com:443"},
+		{name: "slash", sni: "api.example.com/path"},
+		{name: "at sign", sni: "api@example.com"},
+		{name: "254 bytes", sni: strings.Repeat("a", 254)},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := ValidWireSNI(test.sni); got != test.accept {
+				t.Fatalf("ValidWireSNI(%q) = %v, want %v", test.sni, got, test.accept)
+			}
+		})
+	}
+}
+
+// Source: internal/probe/probe.go ValidMethod; a request method must be an
+// RFC 9110 token to go on the wire.
+func TestValidMethod(t *testing.T) {
+	tests := []struct {
+		name   string
+		method string
+		accept bool
+	}{
+		{name: "get", method: "GET", accept: true},
+		{name: "lowercase", method: "get", accept: true},
+		{name: "token punctuation", method: "M-SEARCH", accept: true},
+		{name: "empty", method: ""},
+		{name: "space", method: "GET POST"},
+		{name: "crlf", method: "GET\r\nX-Injected: 1"},
+		{name: "colon", method: "GET:"},
+		{name: "control byte", method: "GET\x00"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := ValidMethod(test.method); got != test.accept {
+				t.Fatalf("ValidMethod(%q) = %v, want %v", test.method, got, test.accept)
+			}
+		})
+	}
+}
