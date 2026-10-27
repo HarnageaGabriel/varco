@@ -54,6 +54,9 @@ const (
 	CodePlanConfigMap Code = "VAR-PLAN-0010"
 	// CodePlanAnnotationsIgnored reports annotations ignored by the generic profile.
 	CodePlanAnnotationsIgnored Code = "VAR-PLAN-0009"
+	// CodePlanIngressClassExcluded reports an Ingress excluded from the plan
+	// because its class does not match the requested one.
+	CodePlanIngressClassExcluded Code = "VAR-PLAN-0011"
 )
 
 // Severity is a diagnostic impact level.
@@ -153,6 +156,7 @@ func List() []Entry {
 		{Code: CodePlanNoPath, Area: "PLAN", Title: "No plannable HTTP path", Severity: SeverityWarning, Description: "An Ingress serves only spec.defaultBackend, or a rule has no HTTP path, so varco can plan no case for it.", Remediation: "Add an HTTP path with a backend, or probe the default backend manually."},
 		{Code: CodePlanConfigMap, Area: "PLAN", Title: "Controller ConfigMap setting", Severity: SeverityWarning, Description: "An ingress-nginx controller ConfigMap setting can change observable request or response behavior and is not encoded in an Ingress manifest.", Remediation: "Compare the value on both controllers and verify the behavior against the ingress-nginx ConfigMap documentation."},
 		{Code: CodePlanAnnotationsIgnored, Area: "PLAN", Title: "Annotations ignored by profile", Severity: SeverityWarning, Description: "The generic profile ignores controller annotations instead of interpreting their routing behavior.", Remediation: "Use the nginx profile when annotation-driven behavior is under test, or verify the annotations against the target controller."},
+		{Code: CodePlanIngressClassExcluded, Area: "PLAN", Title: "Ingress excluded by class filter", Severity: SeverityWarning, Description: "An Ingress was excluded from the plan because its class does not match the requested one, so no case was planned for it.", Remediation: "Plan without the class filter, or with the class the Ingress declares. The exclusion is reported because it can change the plan: an excluded use-regex Ingress makes ingress-nginx match every path of its host as a regex, and the planner computes that host scope over the included resources only, so the change would stay invisible."},
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Code < entries[j].Code })
 	return entries

@@ -1,4 +1,4 @@
-.PHONY: build test bench fuzz lint vuln cover tidy fmt docs docs-check release-check
+.PHONY: build test bench fuzz lint vuln cover tidy fmt docs docs-check release-check verify-reproducible
 
 build:
 	go build -trimpath ./...
@@ -32,6 +32,7 @@ docs:
 
 docs-check:
 	go run ./tools/docsgen -out docs/diagnostics -reference-out docs/reference -check
+	go run ./tools/linkcheck
 
 release-check:
 	@if command -v goreleaser >/dev/null 2>&1; then \
@@ -47,3 +48,6 @@ release-check:
 		echo "release-check: goreleaser is not installed; install GoReleaser v2 first" >&2; \
 		exit 1; \
 	fi
+
+verify-reproducible:
+	sh scripts/verify-reproducible.sh

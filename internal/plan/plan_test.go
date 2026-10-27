@@ -437,6 +437,263 @@ func TestBuildIngressClassFilter(t *testing.T) {
 	}
 }
 
+// classIngress returns one Ingress that declares its class in
+// spec.ingressClassName, in the legacy kubernetes.io/ingress.class annotation,
+// in both, or in neither.
+func classIngress(namespace, name, class, annotationClass string) ingress.Ingress {
+	resource := ingress.Ingress{
+		APIVersion: ingress.APIVersion,
+		Kind:       ingress.KindIngress,
+		Namespace:  namespace,
+		Name:       name,
+		Rules:      []ingress.Rule{{Host: name + ".example.com", Paths: []ingress.Path{{Path: "/" + name, PathType: "Prefix"}}}},
+	}
+	if class != "" {
+		resource.ClassName = class
+	}
+	if annotationClass != "" {
+		resource.Annotations = map[string]string{AnnotationIngressClass: annotationClass}
+	}
+	return resource
+}
+
+// TestBuildIngressClassExclusionWarnings covers the VAR-PLAN-0011 warning: one
+// warning per Ingress the class filter left out of the plan, naming the
+// Ingress as namespace/name, the class it declares and the class that was
+// requested.
+//
+// Sources: docs/plan.md (the --ingress-class flag matches spec.ingressClassName
+// or the kubernetes.io/ingress.class annotation; Known limitations: the
+// excluded resource is dropped and the regex scope is computed over the
+// included resources only), internal/plan/generate.go matchesClass (the
+// planner keeps an Ingress when either source matches) and ADR 0002 (every
+// reported condition carries a stable VAR- code).
+//
+// The class filter runs before any profile-specific work (internal/plan/generate.go
+// run), so both profiles report the exclusion the same way.
+func TestBuildIngressClassExclusionWarnings(t *testing.T) {
+	tests := []struct {
+		name      string
+		resources []ingress.Ingress
+		class     string
+		want      []Warning
+	}{
+		{
+			name:      "no class filter excludes nothing",
+			resources: []ingress.Ingress{classIngress("ns", "checkout", "nginx", ""), classIngress("ns", "other", "traefik", "")},
+			class:     "",
+			want:      []Warning{},
+		},
+		{
+			name:      "matching spec class",
+			resources: []ingress.Ingress{classIngress("ns", "checkout", "nginx", "")},
+			class:     "nginx",
+			want:      []Warning{},
+		},
+		{
+			name:      "matching legacy annotation class",
+			resources: []ingress.Ingress{classIngress("ns", "legacy", "", "nginx")},
+			class:     "nginx",
+			want:      []Warning{},
+		},
+		{
+			name:      "non-matching spec class",
+			resources: []ingress.Ingress{classIngress("ns", "other", "traefik", "")},
+			class:     "nginx",
+			want: []Warning{{
+				Code:    diag.CodePlanIngressClassExcluded,
+				Ingress: "ns/other",
+				Message: `ns/other is excluded by --ingress-class "nginx": it declares class "traefik" (spec.ingressClassName)`,
+			}},
+		},
+		{
+			name:      "non-matching legacy annotation class",
+			resources: []ingress.Ingress{classIngress("ns", "legacy", "", "traefik")},
+			class:     "nginx",
+			want: []Warning{{
+				Code:    diag.CodePlanIngressClassExcluded,
+				Ingress: "ns/legacy",
+				Message: `ns/legacy is excluded by --ingress-class "nginx": it declares class "traefik" (kubernetes.io/ingress.class)`,
+			}},
+		},
+		{
+			// An Ingress that declares no class at all is excluded as well:
+			// matchesClass only keeps the resources that declare the requested
+			// class, so a classless Ingress is dropped today (docs/plan.md,
+			// Known limitations) and the warning says so.
+			name:      "no class declared",
+			resources: []ingress.Ingress{classIngress("ns", "classless", "", "")},
+			class:     "nginx",
+			want: []Warning{{
+				Code:    diag.CodePlanIngressClassExcluded,
+				Ingress: "ns/classless",
+				Message: `ns/classless is excluded by --ingress-class "nginx": it declares no class`,
+			}},
+		},
+		{
+			name:      "both class sources disagree",
+			resources: []ingress.Ingress{classIngress("ns", "mixed", "nginx", "traefik")},
+			class:     "istio",
+			want: []Warning{{
+				Code:    diag.CodePlanIngressClassExcluded,
+				Ingress: "ns/mixed",
+				Message: `ns/mixed is excluded by --ingress-class "istio": it declares class "nginx" (spec.ingressClassName) and class "traefik" (kubernetes.io/ingress.class)`,
+			}},
+		},
+		{
+			name: "several excluded Ingresses are sorted",
+			resources: []ingress.Ingress{
+				classIngress("prod", "zeta", "traefik", ""),
+				classIngress("dev", "alpha", "", "traefik"),
+				classIngress("prod", "alpha", "istio", ""),
+			},
+			class: "nginx",
+			want: []Warning{
+				{
+					Code:    diag.CodePlanIngressClassExcluded,
+					Ingress: "dev/alpha",
+					Message: `dev/alpha is excluded by --ingress-class "nginx": it declares class "traefik" (kubernetes.io/ingress.class)`,
+				},
+				{
+					Code:    diag.CodePlanIngressClassExcluded,
+					Ingress: "prod/alpha",
+					Message: `prod/alpha is excluded by --ingress-class "nginx": it declares class "istio" (spec.ingressClassName)`,
+				},
+				{
+					Code:    diag.CodePlanIngressClassExcluded,
+					Ingress: "prod/zeta",
+					Message: `prod/zeta is excluded by --ingress-class "nginx": it declares class "traefik" (spec.ingressClassName)`,
+				},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			excluded := excludedKeys(test.resources, test.class)
+			for _, profile := range []string{ProfileNginx, ProfileGeneric} {
+				result := Build(test.resources, Options{IngressClass: test.class, Profile: profile})
+				exclusions := classExclusionWarnings(result.Warnings)
+				if !reflect.DeepEqual(exclusions, test.want) {
+					t.Fatalf("profile %s: exclusion warnings = %#v, want %#v", profile, exclusions, test.want)
+				}
+				// The exclusion is a warning, never an unsupported finding.
+				for _, finding := range result.Unsupported {
+					for _, key := range excluded {
+						if finding.Ingress == key {
+							t.Fatalf("profile %s: the excluded Ingress %s produced a finding: %#v", profile, key, finding)
+						}
+					}
+				}
+			}
+		})
+	}
+}
+
+// excludedKeys returns the keys of the resources the class filter leaves out
+// of the plan: the ones that declare neither the requested class in
+// spec.ingressClassName nor the legacy kubernetes.io/ingress.class annotation.
+//
+// Sources: internal/plan/generate.go matchesClass and docs/plan.md (the
+// --ingress-class flag matches spec.ingressClassName or the
+// kubernetes.io/ingress.class annotation).
+func excludedKeys(resources []ingress.Ingress, class string) []string {
+	if class == "" {
+		return nil
+	}
+	keys := make([]string, 0, len(resources))
+	for _, resource := range resources {
+		if resource.ClassName == class || resource.Annotations[AnnotationIngressClass] == class {
+			continue
+		}
+		keys = append(keys, resource.Key())
+	}
+	return keys
+}
+
+// classExclusionWarnings returns the VAR-PLAN-0011 warnings of a plan. The
+// other warnings are left out: the generic profile reports the annotations it
+// ignores with VAR-PLAN-0009 (internal/plan/generate.go, genericProfile
+// prepareResource), and that warning is not part of the class filter.
+func classExclusionWarnings(warnings []Warning) []Warning {
+	kept := make([]Warning, 0, len(warnings))
+	for _, warning := range warnings {
+		if warning.Code == diag.CodePlanIngressClassExcluded {
+			kept = append(kept, warning)
+		}
+	}
+	return kept
+}
+
+// TestBuildIngressClassExclusionIsIndependentOfInputOrder proves that the
+// exclusion warnings do not depend on the order of the input resources: the
+// plan sorts the warnings by code, Ingress and message (internal/plan/plan.go
+// finalizeWarnings), so the same resources in any order report the same
+// exclusions.
+//
+// Sources: CONVENTIONS.md ("Same input, same output") and docs/plan.md
+// ("Determinism guarantees": the output does not depend on the order of the
+// input resources).
+func TestBuildIngressClassExclusionIsIndependentOfInputOrder(t *testing.T) {
+	resources := []ingress.Ingress{
+		classIngress("prod", "checkout", "nginx", ""),
+		classIngress("prod", "other", "traefik", ""),
+		classIngress("dev", "legacy", "", "istio"),
+		classIngress("dev", "classless", "", ""),
+	}
+	forward := Build(resources, Options{IngressClass: "nginx"})
+	reversed := Build([]ingress.Ingress{resources[3], resources[2], resources[1], resources[0]}, Options{IngressClass: "nginx"})
+	if !reflect.DeepEqual(forward.Warnings, reversed.Warnings) {
+		t.Fatalf("warnings = %#v, want %#v", forward.Warnings, reversed.Warnings)
+	}
+	if len(forward.Warnings) != 3 {
+		t.Fatalf("warnings = %#v, want one per excluded Ingress", forward.Warnings)
+	}
+	for index := 1; index < len(forward.Warnings); index++ {
+		if forward.Warnings[index-1].Ingress > forward.Warnings[index].Ingress {
+			t.Fatalf("warnings are not sorted: %#v", forward.Warnings)
+		}
+	}
+}
+
+// TestBuildIngressClassExclusionKeepsRegexScopeOverIncludedResources proves
+// that reporting the exclusion does not change the plan: the regex scope is
+// still computed over the included resources only, so an excluded use-regex
+// Ingress does not widen the scope of the included ones. The exclusion is
+// reported because that silent change stays invisible otherwise.
+//
+// Sources: docs/plan.md (Known limitations: the regex scope is computed over
+// the included resources only) and internal/plan/generate.go (the class filter
+// runs before the hosts are resolved).
+func TestBuildIngressClassExclusionKeepsRegexScopeOverIncludedResources(t *testing.T) {
+	included := classIngress("ns", "included", "nginx", "")
+	included.Annotations = map[string]string{annotationUseRegex: "true"}
+	excluded := classIngress("ns", "excluded", "traefik", "")
+	excluded.Annotations = map[string]string{annotationUseRegex: "true"}
+	// The excluded Ingress declares the host of the included one, so it would
+	// widen the regex scope of that host if it were planned.
+	excluded.Rules = []ingress.Rule{{Host: "included.example.com", Paths: []ingress.Path{{Path: "/excluded", PathType: "Prefix"}}}}
+
+	result := Build([]ingress.Ingress{included, excluded}, Options{IngressClass: "nginx"})
+	exclusions := 0
+	for _, warning := range result.Warnings {
+		switch warning.Code {
+		case diag.CodePlanIngressClassExcluded:
+			exclusions++
+			if warning.Ingress != "ns/excluded" {
+				t.Fatalf("warning = %#v, want the excluded Ingress", warning)
+			}
+		case diag.CodePlanRegexHostWide:
+			// Only the included Ingress turned the host-wide regex scope on.
+			if warning.Ingress != "ns/included" {
+				t.Fatalf("warning = %#v, want the included Ingress", warning)
+			}
+		}
+	}
+	if exclusions != 1 {
+		t.Fatalf("warnings = %#v, want one VAR-PLAN-0011 warning", result.Warnings)
+	}
+}
+
 func TestBuildAnnotationFindings(t *testing.T) {
 	annotations := map[string]string{
 		annotationUseRegex:                                 "true",

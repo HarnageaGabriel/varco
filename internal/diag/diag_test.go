@@ -2,6 +2,7 @@ package diag
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -22,6 +23,7 @@ func TestRegistry(t *testing.T) {
 		{CodeCompareBody, "CMP", SeverityInfo},
 		{CodeCompareCookie, "CMP", SeverityInfo},
 		{CodePlanConfigMap, "PLAN", SeverityWarning},
+		{CodePlanIngressClassExcluded, "PLAN", SeverityWarning},
 	}
 
 	for _, test := range tests {
@@ -37,6 +39,30 @@ func TestRegistry(t *testing.T) {
 	}
 	if _, ok := Lookup("VAR-CFG-9999"); ok {
 		t.Fatal("Lookup() found unknown code")
+	}
+}
+
+// TestPlanIngressClassExcludedEntry checks the registry entry of
+// VAR-PLAN-0011: the planner reports an Ingress the class filter excluded, so
+// the entry has to name the condition, the fix and the reason the exclusion
+// matters (an excluded use-regex Ingress changes the host scope).
+//
+// Sources: docs/dev/add-diagnostic.md ("The Entry has an Area, a Title, a
+// Severity, a Description and a Remediation") and docs/plan.md (the known
+// limitation that regex scope is computed over the included resources only).
+func TestPlanIngressClassExcludedEntry(t *testing.T) {
+	entry, ok := Lookup(CodePlanIngressClassExcluded)
+	if !ok {
+		t.Fatal("Lookup() did not find VAR-PLAN-0011")
+	}
+	if entry.Title == "" || entry.Description == "" || entry.Remediation == "" {
+		t.Fatalf("Lookup() = %#v, want a title, a description and a remediation", entry)
+	}
+	if !strings.Contains(entry.Description, "excluded") {
+		t.Fatalf("description = %q, want it to name the exclusion", entry.Description)
+	}
+	if !strings.Contains(entry.Remediation, "use-regex") {
+		t.Fatalf("remediation = %q, want it to name the excluded use-regex Ingress", entry.Remediation)
 	}
 }
 

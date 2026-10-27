@@ -262,6 +262,106 @@ func TestRunAcceptsPlanFindingsAndWarnings(t *testing.T) {
 	}
 }
 
+// TestRunRejectsInvalidPlanCaseSNIAndMethod covers the plan validation of
+// the two fields the CLI sends on the wire but did not check: the TLS server
+// name and the HTTP method. A bad value is refused with the case index and
+// the field named, and the value is never echoed.
+func TestRunRejectsInvalidPlanCaseSNIAndMethod(t *testing.T) {
+	valid := plan.Case{ID: "aaaaaaaaaaaa", Host: "app.example", Scheme: "https", Method: "GET", Path: "/", Family: "base"}
+	withField := func(change func(item *plan.Case)) plan.Case {
+		item := valid
+		change(&item)
+		return item
+	}
+	tests := []struct {
+		name      string
+		item      plan.Case
+		wantField string
+		marker    string
+	}{
+		{name: "sni with a space", item: withField(func(item *plan.Case) { item.SNI = "app example" }), wantField: "sni", marker: "app example"},
+		{name: "sni with NUL", item: withField(func(item *plan.Case) { item.SNI = "app\x00.example" }), wantField: "sni", marker: "\x00"},
+		{name: "sni with a colon", item: withField(func(item *plan.Case) { item.SNI = "app.example:443" }), wantField: "sni", marker: ":443"},
+		{name: "sni with a slash", item: withField(func(item *plan.Case) { item.SNI = "app.example/path" }), wantField: "sni", marker: "/path"},
+		{name: "sni over 253 bytes", item: withField(func(item *plan.Case) { item.SNI = strings.Repeat("a", 254) }), wantField: "sni", marker: strings.Repeat("a", 254)},
+		{name: "method with a space", item: withField(func(item *plan.Case) { item.Method = "GET POST" }), wantField: "method", marker: "GET POST"},
+		{name: "method with CRLF", item: withField(func(item *plan.Case) { item.Method = "GET\r\nX-Injected: 1" }), wantField: "method", marker: "X-Injected"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			code, stdout, stderr := runCLI(t, planJSON(t, []plan.Case{test.item}), dryRunArgs("-")...)
+			if code != 2 {
+				t.Fatalf("exit code = %d, want 2; stdout = %q", code, stdout)
+			}
+			if !strings.Contains(stderr, "VAR-CFG-0001") {
+				t.Fatalf("stderr = %q, want a VAR-CFG-0001 diagnostic", stderr)
+			}
+			if !strings.Contains(stderr, "index 0") {
+				t.Fatalf("stderr = %q, want the case index", stderr)
+			}
+			if !strings.Contains(stderr, "invalid "+test.wantField) {
+				t.Fatalf("stderr = %q, want the %s field", stderr, test.wantField)
+			}
+			if strings.Contains(stderr, test.marker) {
+				t.Fatalf("stderr = %q, want no echo of the invalid value", stderr)
+			}
+			if stdout != "" {
+				t.Fatalf("stdout = %q, want nothing", stdout)
+			}
+		})
+	}
+}
+
+// TestRunAcceptsUnderscoreSNI covers the other side of the SNI validation: a
+// host with an underscore in a label is a legal server name on the wire, so
+// the plan still loads.
+func TestRunAcceptsUnderscoreSNI(t *testing.T) {
+	item := plan.Case{ID: "aaaaaaaaaaaa", Host: "my_app.example", Scheme: "https", SNI: "my_app.example", Method: "GET", Path: "/", Family: "base"}
+	code, stdout, stderr := runCLI(t, planJSON(t, []plan.Case{item}), dryRunArgs("-")...)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stdout = %q stderr = %q", code, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "my_app.example") {
+		t.Fatalf("stdout = %q, want the server name in the dry-run line", stdout)
+	}
+}
+
+// TestRunRejectsUnsupportedMethod covers the method rule of the run command:
+// a method that is a valid token but not GET, HEAD or OPTIONS is refused with
+// the VAR-RUN-0001 diagnostic and exit code 2.
+func TestRunRejectsUnsupportedMethod(t *testing.T) {
+	item := plan.Case{ID: "aaaaaaaaaaaa", Host: "app.example", Scheme: "http", Method: "DELETE", Path: "/", Family: "base"}
+	code, stdout, stderr := runCLI(t, planJSON(t, []plan.Case{item}), dryRunArgs("-")...)
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2; stdout = %q", code, stdout)
+	}
+	if !strings.Contains(stderr, "VAR-RUN-0001") {
+		t.Fatalf("stderr = %q, want a VAR-RUN-0001 diagnostic", stderr)
+	}
+	if !strings.Contains(stderr, "case aaaaaaaaaaaa uses method DELETE") {
+		t.Fatalf("stderr = %q, want the case id and the method", stderr)
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want nothing", stdout)
+	}
+}
+
+// TestRunDryRunOutputIsUnchanged locks the dry-run output of a valid plan:
+// escaping the control bytes must not change a single byte of it.
+func TestRunDryRunOutputIsUnchanged(t *testing.T) {
+	item := plan.Case{ID: "aaaaaaaaaaaa", Host: "app.example", Scheme: "http", Method: "GET", Path: "/", Family: "base"}
+	code, stdout, stderr := runCLI(t, planJSON(t, []plan.Case{item}), dryRunArgs("-")...)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr = %q", code, stderr)
+	}
+	want := "old http 127.0.0.1:8080 GET app.example - /\n" +
+		"new http 127.0.0.1:8080 GET app.example - /\n" +
+		"TOTAL 2\n"
+	if stdout != want {
+		t.Fatalf("stdout = %q, want %q", stdout, want)
+	}
+}
+
 // TestRunAcceptsValidPlanFromTestdata covers the other side of the plan
 // validation: the plans varco writes itself still load, host-variant Host
 // header overrides included.

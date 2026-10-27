@@ -63,6 +63,42 @@ gh release view v0.1.0 --repo HarnageaGabriel/varco
 gh attestation verify varco_0.1.0_linux_amd64.tar.gz --repo HarnageaGabriel/varco
 ```
 
+## Verify reproducibility
+
+The release binaries are reproducible: two builds of the same commit have the
+same SHA-256. Run the check from the root of the repository:
+
+```sh
+make verify-reproducible
+```
+
+The target runs `sh scripts/verify-reproducible.sh`, which builds the
+linux/amd64 and the windows/amd64 binary twice with the flags of
+`.goreleaser.yaml` and compares the SHA-256 of the two builds of every
+target. The script also takes one optional argument, the path of a released
+archive (`varco_0.1.2_linux_amd64.tar.gz` or `varco_0.1.2_windows_amd64.zip`).
+It then rebuilds the same version from the matching tag in a temporary
+checkout of the tag and compares the SHA-256 of the released binary and of the
+rebuild:
+
+```sh
+sh scripts/verify-reproducible.sh varco_0.1.2_linux_amd64.tar.gz
+```
+
+The toolchain must match the toolchain of the release, otherwise the
+binaries differ: the release workflow builds with the Go version of `go.mod`
+(`go-version-file: go.mod`), so rebuild with the same Go release. The script
+prints the local and the release toolchain and warns when they differ.
+
+The build metadata of a release is the commit metadata: `version.Version`,
+`version.Commit` and `version.Date` hold the version, the commit SHA and the
+commit timestamp (`.CommitDate`, RFC 3339 in UTC). The build time is not
+stamped, so a rebuild of a tag has the same bytes as the release. Do not
+stamp `version.Date` with the build time (`.Date`) again: two builds of the
+same commit would then differ in that field and in the SHA-256 of the binary.
+The releases `v0.1.0` and `v0.1.1` stamped the build time and cannot be
+reproduced bit for bit.
+
 ## Yank a bad release
 
 1. Do not delete or force-move the tag; preserve the evidence and signed
