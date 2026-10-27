@@ -71,7 +71,7 @@ installed:
 | `make tidy` | `go mod tidy` | |
 | `make fmt` | `gofumpt -w cmd internal tools` | |
 | `make docs` | `go run ./tools/docsgen -out docs/diagnostics` | regenerates the diagnostic pages, see [add-diagnostic.md](add-diagnostic.md) |
-| `make docs-check` | `go run ./tools/docsgen -out docs/diagnostics -check` | the CI drift check; writes nothing |
+| `make docs-check` | `go run ./tools/docsgen -out docs/diagnostics -reference-out docs/reference -check` and `go run ./tools/linkcheck` | the CI drift check and the Markdown link check; writes nothing |
 | `make release-check` | `goreleaser check` and `goreleaser release --snapshot --clean` | fails when GoReleaser is not installed |
 
 ## Windows notes
@@ -206,6 +206,7 @@ Do not use `git stash`; use a work-in-progress commit
 - [ ] `go test ./...` passes.
 - [ ] `golangci-lint run ./...` passes (or `make lint` where `make` exists).
 - [ ] `go run ./tools/docsgen -out docs/diagnostics -check` reports no drift.
+- [ ] `go run ./tools/linkcheck` reports no broken link.
 - [ ] Every commit was made with `git commit -s`.
 - [ ] You read [CONVENTIONS.md](../../CONVENTIONS.md) and the ADR your change
       touches.
