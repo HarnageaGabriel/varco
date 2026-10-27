@@ -4,6 +4,30 @@ All notable changes are documented here. Format: [Keep a Changelog](https://keep
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-28
+
+Hardening release. It makes plan generation independent of input order, closes the remaining ways remote or plan-supplied text could reach the terminal, and ships reproducible release binaries. Output change to note: the case ids of the `head` family and of some `host-variant` cases changed (see Fixed).
+
+### Security
+
+- Escape control characters in all table output built from remote or plan-supplied data: the `varco run` and `varco diff` tables, the `varco plan` table, the `--dry-run` request lines, the `VAR-RUN-0001` message and kubectl stderr. Control bytes (C0, DEL, C1) and invalid UTF-8 are shown as visible `\xNN` escapes, so a hostile backend, plan file or kubectl error cannot repaint or rewrite the operator's terminal. JSON output was already safe. See ADR 0011.
+- Validate the `sni` and `method` of every case of a `--plan` document at load, with the case index and field named and the value never echoed (`VAR-CFG-0001`). See ADR 0010.
+- Bound the certificate fields captured by the prober: subject and issuer at 1024 bytes, 64 SANs of at most 253 bytes each, truncated on a UTF-8 boundary with a `...` marker and a final `...+N more` entry. The SHA-256 fingerprint still covers the complete certificate.
+
+### Fixed
+
+- Make plan generation independent of the order of the input resources. The `head` and `host-variant` cases now use the lexicographically smallest planned path of the host, and `VAR-PLAN-0006` names the Ingress with the smallest namespace/name. Because the case note is part of the id, every `head` case id changed, and `host-variant` ids changed where the smallest path differs from the first; ids of all other families are unchanged.
+- Report one manifest error layout: `VAR-PLAN-0003: document N: ...` for decode, parse and validation failures alike.
+- Stop dropping Ingress resources silently: `--ingress-class` now reports every excluded Ingress with the new warning `VAR-PLAN-0011`.
+
+### Added
+
+- Add `make demo`: two local servers playing the old and the new ingress with documented differences, and a walkthrough in `docs/demo.md` that goes from `DIFFERENT` to `EQUIVALENT` with an exceptions file.
+- Add reproducible release binaries: the version date is now the commit date, and `make verify-reproducible` and `scripts/verify-reproducible.sh` rebuild and compare hashes (`v0.1.0` and `v0.1.1` stamped the build time and cannot be reproduced bit for bit).
+- Add `scripts/update-release-docs.sh`, which rewrites the version strings and the Krew hashes after a release.
+- Add a generated command reference in `docs/reference/` (checked in CI), a Markdown link checker (`tools/linkcheck`, part of `make docs-check`), and documentation: architecture map, threat model, limitations, contributor how-to guides, ADRs 0009 to 0011, and the first-match rule of exceptions.
+- Add tests: metamorphic and property tests for the comparator and the exceptions evaluator, determinism and input-order tests for the planner, hostile-server end-to-end scenarios, manifest edge cases, TLS edge cases, engine edge cases, rendering fuzz targets and source checks for explanations.
+
 ## [0.1.1] - 2026-10-20
 
 Security and hardening release. It fixes a credential leak in error messages that affects `v0.1.0`; upgrading is recommended.
@@ -61,6 +85,7 @@ The first pre-alpha release of varco; command output formats, JSON schemas and f
 - Harden `varco diff` request handling: request targets are sent verbatim (no re-escaping of `%2F`, `?`, `//`), probes ignore proxies, do not decompress, accept TLS 1.0+, hash the whole body, and refuse CR/LF/control bytes, invalid header names/values, `Host`/`Content-Length`/`Transfer-Encoding`/`Trailer`/`Connection` headers and more credential headers (`X-Api-Key`, `X-Auth-Token`, `Private-Token`, `Api-Key`).
 - Harden `varco diff` response probing: cap header blocks at 64 KiB, skip up to eight informational responses, capture trailers, default non-positive probe timeouts to 10 seconds, and cap body hashing at a configurable 256 MiB default. SNI now defaults without the Host port and rejects port-bearing values; invalid paths are redacted in errors, and cancellation takes precedence over probe failures.
 
-[Unreleased]: https://github.com/HarnageaGabriel/varco/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/HarnageaGabriel/varco/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/HarnageaGabriel/varco/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/HarnageaGabriel/varco/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/HarnageaGabriel/varco/releases/tag/v0.1.0
