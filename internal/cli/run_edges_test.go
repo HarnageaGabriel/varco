@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/HarnageaGabriel/varco/internal/diag"
+	"github.com/HarnageaGabriel/varco/internal/engine"
+	"github.com/HarnageaGabriel/varco/internal/model"
 	"github.com/HarnageaGabriel/varco/internal/plan"
 )
 
@@ -323,6 +325,52 @@ func TestLoadRunPlanFromClusterSortsWarnings(t *testing.T) {
 	}
 	if !reflect.DeepEqual(result.Warnings, want) {
 		t.Fatalf("warnings = %#v, want %#v", result.Warnings, want)
+	}
+}
+
+// Source: internal/cli/run.go printDryRun; a plan that carries a control byte
+// in a field the dry-run line prints cannot put it on the terminal: the
+// printer escapes it.
+func TestPrintDryRunEscapesControlBytes(t *testing.T) {
+	var stdout bytes.Buffer
+	printDryRun(&stdout, []engine.DryRequest{{
+		Side:     "old",
+		Scheme:   "http",
+		Endpoint: "127.0.0.1:8080",
+		Method:   "GET",
+		Host:     "app\x1b[31m.example",
+		Path:     "/",
+	}})
+	if strings.Contains(stdout.String(), "\x1b") {
+		t.Fatalf("stdout = %q, want no escape byte", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), `\x1b`) {
+		t.Fatalf("stdout = %q, want the escape byte rendered as text", stdout.String())
+	}
+}
+
+// Source: internal/cli/run.go unsupportedMethodFailure; the case id and the
+// method come from the plan, so the VAR-RUN-0001 message escapes them.
+func TestUnsupportedMethodFailureEscapesControlBytes(t *testing.T) {
+	var stderr bytes.Buffer
+	code := unsupportedMethodFailure([]model.ProbeCase{{
+		ID:     "aaaaaaaaaaaa\x1b[31m",
+		Host:   "app.example",
+		Scheme: "http",
+		Method: "DELETE",
+		Path:   "/",
+	}}, &stderr)
+	if code != 2 {
+		t.Fatalf("code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr.String(), "VAR-RUN-0001") {
+		t.Fatalf("stderr = %q, want a VAR-RUN-0001 diagnostic", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "\x1b") {
+		t.Fatalf("stderr = %q, want no escape byte", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), `\x1b`) {
+		t.Fatalf("stderr = %q, want the escape byte rendered as text", stderr.String())
 	}
 }
 
