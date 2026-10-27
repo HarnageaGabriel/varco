@@ -24,6 +24,7 @@ import (
 	"github.com/HarnageaGabriel/varco/internal/plan"
 	"github.com/HarnageaGabriel/varco/internal/policy"
 	"github.com/HarnageaGabriel/varco/internal/probe"
+	"github.com/HarnageaGabriel/varco/internal/redact"
 	"github.com/HarnageaGabriel/varco/internal/report"
 )
 
@@ -140,14 +141,8 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return code
 	}
 	probeCases, excluded := engine.FilterCases(model.FromPlanCases(manifest.Cases), families, excludePaths)
-	for _, item := range probeCases {
-		if !runMethods[strings.ToUpper(item.Method)] {
-			message := fmt.Sprintf("case %s uses method %s", item.ID, item.Method)
-			if code := diagFailure(stderr, diag.CodeUnsupportedMethod, message); code != 0 {
-				return code
-			}
-			return 2
-		}
+	if code := unsupportedMethodFailure(probeCases, stderr); code != 0 {
+		return code
 	}
 	var exceptionFile policy.File
 	if *exceptions != "" {
@@ -173,11 +168,7 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		Now:         clock.Real{}.Now().UTC(),
 	}
 	if *dryRun {
-		requests := engine.DryRun(config)
-		for _, request := range requests {
-			_, _ = fmt.Fprintln(stdout, request.Line())
-		}
-		_, _ = fmt.Fprintf(stdout, "TOTAL %d\n", len(requests))
+		printDryRun(stdout, engine.DryRun(config))
 		return 0
 	}
 	if !*quiet {
@@ -212,6 +203,34 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	default:
 		return 0
 	}
+}
+
+// unsupportedMethodFailure reports the first case whose method the run does
+// not allow and returns the exit code. Only GET, HEAD and OPTIONS run
+// (ADR 0003). The case id and the method come from the plan, so both are
+// escaped before they reach the terminal.
+func unsupportedMethodFailure(cases []model.ProbeCase, stderr io.Writer) int {
+	for _, item := range cases {
+		if runMethods[strings.ToUpper(item.Method)] {
+			continue
+		}
+		message := fmt.Sprintf("case %s uses method %s", redact.EscapeControl(item.ID), redact.EscapeControl(item.Method))
+		if code := diagFailure(stderr, diag.CodeUnsupportedMethod, message); code != 0 {
+			return code
+		}
+		return 2
+	}
+	return 0
+}
+
+// printDryRun prints the requests a run would send, one per line, and the
+// total. Every field of a request comes from the plan, so the whole line is
+// escaped before it reaches the terminal.
+func printDryRun(stdout io.Writer, requests []engine.DryRequest) {
+	for _, request := range requests {
+		_, _ = fmt.Fprintln(stdout, redact.EscapeControl(request.Line()))
+	}
+	_, _ = fmt.Fprintf(stdout, "TOTAL %d\n", len(requests))
 }
 
 func loadRunPlanFromCluster(namespace, contextName, kubeconfig string, timeout time.Duration, controllerRef string, options plan.Options, stderr io.Writer) (plan.Plan, int) {
@@ -337,6 +356,12 @@ func planCaseProblem(item plan.Case) string {
 	}
 	if !probe.ValidPath(item.Path) {
 		return "path"
+	}
+	if !probe.ValidMethod(item.Method) {
+		return "method"
+	}
+	if !probe.ValidWireSNI(item.SNI) {
+		return "sni"
 	}
 	if !validPlanText(item.ID) {
 		return "id"

@@ -63,7 +63,7 @@ type Request struct {
 // probe must not share connection state with another endpoint or path).
 func Do(ctx context.Context, request Request) (result.Result, error) {
 	method := strings.ToUpper(request.Method)
-	if !validToken(method) {
+	if !ValidMethod(method) {
 		return result.Result{}, diagnosticError(diag.CodeInvalidFlag, fmt.Sprintf("invalid method %q", request.Method), nil)
 	}
 	if !safeMethod(method) && !request.AllowUnsafeMethod {
@@ -78,7 +78,7 @@ func Do(ctx context.Context, request Request) (result.Result, error) {
 	if !ValidHost(request.Host) {
 		return result.Result{}, diagnosticError(diag.CodeInvalidFlag, fmt.Sprintf("invalid host %q", request.Host), nil)
 	}
-	if !validSNIOnWire(request.SNI) {
+	if !ValidWireSNI(request.SNI) {
 		// The SNI of a plan or manifest case goes on the wire as the TLS
 		// server name, so it is checked like the host. The value itself is
 		// not echoed: it may carry the bytes that made it invalid.
@@ -386,6 +386,11 @@ func hostOverride(headers []result.Header) (string, []result.Header, error) {
 // ValidHeaderName reports whether name is an RFC 9110 token.
 func ValidHeaderName(name string) bool { return validToken(name) }
 
+// ValidMethod reports whether method is an RFC 9110 token, the shape a
+// request method must have to go on the wire. It says nothing about whether
+// the method is safe to run: that is the run command's own rule.
+func ValidMethod(method string) bool { return validToken(method) }
+
 // ValidHeaderValue rejects control bytes (including CR, LF and NUL) except tab.
 func ValidHeaderValue(value string) bool {
 	for i := 0; i < len(value); i++ {
@@ -447,7 +452,7 @@ func ValidSNI(name string) bool {
 	return true
 }
 
-// validSNIOnWire reports whether name may be sent as the TLS server name of a
+// ValidWireSNI reports whether name may be sent as the TLS server name of a
 // probe. It is deliberately more permissive than ValidSNI, which guards the
 // --sni flag: a plan or a manifest may carry a host with an underscore in a
 // label, and such a host must still be probeable. It accepts letters, digits,
@@ -455,7 +460,7 @@ func ValidSNI(name string) bool {
 // never puts in the SNI extension. It rejects the bytes that could change the
 // structure of the request: control bytes, whitespace, a colon, a slash, an at
 // sign, and names longer than 253 bytes.
-func validSNIOnWire(name string) bool {
+func ValidWireSNI(name string) bool {
 	if name == "" {
 		return true
 	}
