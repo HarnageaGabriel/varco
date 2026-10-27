@@ -32,6 +32,7 @@ docs:
 
 docs-check:
 	go run ./tools/docsgen -out docs/diagnostics -reference-out docs/reference -check
+	go run ./tools/linkcheck
 
 release-check:
 	@if command -v goreleaser >/dev/null 2>&1; then \
