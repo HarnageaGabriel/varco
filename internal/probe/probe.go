@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/HarnageaGabriel/varco/internal/diag"
 	"github.com/HarnageaGabriel/varco/internal/endpoint"
@@ -27,6 +29,12 @@ const (
 	defaultTimeout      = 10 * time.Second
 	maxHeaderBytes      = 64 << 10
 	maxInterimResponses = 8
+
+	maxCertificateSubjectBytes = 1024
+	maxCertificateIssuerBytes  = 1024
+	maxCertificateDNSNames     = 64
+	maxCertificateDNSNameBytes = 253
+	certificateCutMarker       = "..."
 )
 
 var (
@@ -258,13 +266,53 @@ func capture(response *http.Response, state *tls.ConnectionState, maxBodyBytes i
 		captured.ALPN = state.NegotiatedProtocol
 		if len(state.PeerCertificates) != 0 {
 			leaf := state.PeerCertificates[0]
-			fingerprint := sha256.Sum256(leaf.Raw)
-			dnsNames := append([]string(nil), leaf.DNSNames...)
-			sort.Strings(dnsNames)
-			captured.Certificate = &result.Certificate{Subject: leaf.Subject.String(), Issuer: leaf.Issuer.String(), Serial: leaf.SerialNumber.Text(16), NotBefore: leaf.NotBefore, NotAfter: leaf.NotAfter, Fingerprint: hex.EncodeToString(fingerprint[:]), DNSNames: dnsNames}
+			captured.Certificate = captureCertificate(leaf)
 		}
 	}
 	return captured, nil
+}
+
+func captureCertificate(leaf *x509.Certificate) *result.Certificate {
+	fingerprint := sha256.Sum256(leaf.Raw)
+	dnsNames := captureDNSNames(leaf.DNSNames)
+	return &result.Certificate{
+		Subject:     truncateCertificateText(leaf.Subject.String(), maxCertificateSubjectBytes),
+		Issuer:      truncateCertificateText(leaf.Issuer.String(), maxCertificateIssuerBytes),
+		Serial:      leaf.SerialNumber.Text(16),
+		NotBefore:   leaf.NotBefore,
+		NotAfter:    leaf.NotAfter,
+		Fingerprint: hex.EncodeToString(fingerprint[:]),
+		DNSNames:    dnsNames,
+	}
+}
+
+func captureDNSNames(names []string) []string {
+	limit := len(names)
+	cut := false
+	if limit > maxCertificateDNSNames {
+		limit = maxCertificateDNSNames
+		cut = true
+	}
+	captured := make([]string, limit, limit+1)
+	for i := range captured {
+		captured[i] = truncateCertificateText(names[i], maxCertificateDNSNameBytes)
+	}
+	if cut {
+		return append(captured, fmt.Sprintf("%s+%d more", certificateCutMarker, len(names)-limit))
+	}
+	sort.Strings(captured)
+	return captured
+}
+
+func truncateCertificateText(value string, maxBytes int) string {
+	if len(value) <= maxBytes {
+		return value
+	}
+	cut := maxBytes - len(certificateCutMarker)
+	for cut > 0 && !utf8.ValidString(value[:cut]) {
+		cut--
+	}
+	return value[:cut] + certificateCutMarker
 }
 
 func canonicalHeaders(headers http.Header) []result.Header {
