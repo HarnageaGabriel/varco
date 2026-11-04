@@ -15,6 +15,10 @@ to read instead.
 | `VAR-NET-0001: probe new: ...` | [VAR-NET-0001](diagnostics/VAR-NET-0001.md) | [Endpoint unreachable](#var-net-0001-endpoint-unreachable) |
 | `VAR-CFG-0002: ...` | [VAR-CFG-0002](diagnostics/VAR-CFG-0002.md) | [Invalid exceptions file](#var-cfg-0002-invalid-exceptions-file) |
 | `VAR-PLAN-0003: ...` | [VAR-PLAN-0003](diagnostics/VAR-PLAN-0003.md) | [Manifest parse error](#var-plan-0003-manifest-parse-error) |
+| `VAR-PLAN-0011: ...` | [VAR-PLAN-0011](diagnostics/VAR-PLAN-0011.md) | [Ingress excluded by class filter](#var-plan-0011-ingress-excluded-by-class-filter) |
+| `plan case at index ... has an invalid ...` | [VAR-CFG-0001](diagnostics/VAR-CFG-0001.md) | [Rejected plan case](#rejected-plan-case) |
+| `... larger than the 8388608-byte limit varco reads` | [VAR-PLAN-0003](diagnostics/VAR-PLAN-0003.md) or [VAR-CFG-0002](diagnostics/VAR-CFG-0002.md) | [Input file too large](#input-file-too-large) |
+| a value displayed as `\xNN` | none | [Escaped control characters](#escaped-control-characters) |
 | `kube: kubectl not found: ...` | none, exits 2 | [kubectl not found](#kubectl-not-found) |
 | a case whose note is `budget` | none, exits 3 | [Budget skips](#budget-skips) |
 | `EXPIRED EXCEPTIONS` lists an id | none, listed in the report | [Expired exceptions](#expired-exceptions) |
@@ -123,6 +127,75 @@ annotation that is not a scalar, or yields a case with a control byte.
 
 See [VAR-PLAN-0003](diagnostics/VAR-PLAN-0003.md) for the code page and
 [plan.md](plan.md) for the accepted manifests.
+
+## VAR-PLAN-0011: Ingress excluded by class filter
+
+**Symptom.** `varco plan -f ingress.yaml --ingress-class nginx` reports a
+warning and leaves that Ingress out of the cases:
+
+```
+VAR-PLAN-0011  shop/catalog    shop/catalog is excluded by --ingress-class "nginx": it declares class "traefik" (spec.ingressClassName)
+```
+
+**Cause.** The Ingress declares a class different from the class requested by
+`--ingress-class` (or declares no class). The planner drops it, so it cannot
+produce cases for that resource.
+
+**Fix.** Plan with the class the Ingress declares, remove `--ingress-class` to
+include all classes, or deliberately leave it excluded after checking the
+controller ownership. See [VAR-PLAN-0011](diagnostics/VAR-PLAN-0011.md).
+
+## Rejected plan case
+
+**Symptom.** `varco run --plan plan.json` stops before probing, for example:
+
+```
+VAR-CFG-0001: plan case at index 0 has an invalid host
+```
+
+The same message names `sni` or `method` when that field is invalid, such as
+`plan case at index 0 has an invalid sni`.
+
+**Cause.** The plan loader validates every case before a request is sent. The
+case at the reported zero-based index has a field that is not valid for a
+request; the message names the field rather than echoing its value.
+
+**Fix.** Correct the named field in the plan and retry. Check `host`, `path`,
+`method`, `sni`, headers and the other case fields against [plan.md](plan.md).
+See [VAR-CFG-0001](diagnostics/VAR-CFG-0001.md).
+
+## Input file too large
+
+**Symptom.** A plan larger than the input cap is rejected with:
+
+```
+VAR-PLAN-0003: plan.json: plan is larger than the 8388608-byte limit varco reads
+```
+
+An exceptions file produces the equivalent `VAR-CFG-0002` message:
+`exceptions file is larger than the 8388608-byte limit varco reads`.
+
+**Cause.** Manifests, `--plan` files and `--exceptions` files are each capped
+at 8 MiB (8,388,608 bytes) before parsing.
+
+**Fix.** Split a large manifest, plan, or exceptions file into smaller inputs
+and run them separately. See [VAR-PLAN-0003](diagnostics/VAR-PLAN-0003.md),
+[VAR-CFG-0002](diagnostics/VAR-CFG-0002.md), and
+[ADR 0010](adr/0010-input-limits-and-plan-validation.md).
+
+## Escaped control characters
+
+**Symptom.** A report value from remote data contains a visible escape such as
+`DENY\x09INJECTED` instead of an actual tab or a line break.
+
+**Cause.** Control characters from remote data are shown escaped as `\xNN` so
+they cannot rewrite the terminal or split a report row. The underlying value
+is still compared and reported.
+
+**Fix.** Read `\xNN` as the byte value in that field; do not treat the escape
+as literal data sent to the server. There is no diagnostic code for escaping;
+see the [diagnostic index](diagnostics/README.md) and [ADR 0011](adr/0011-terminal-output-safety.md)
+for the output-safety rules.
 
 ## kubectl not found
 
