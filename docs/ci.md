@@ -3,7 +3,7 @@
 Varco compares two ingress controllers before a migration goes live. The
 example workflow in
 [examples/github-actions/varco-compare.yml](../examples/github-actions/varco-compare.yml)
-runs the published `v0.1.0` release in a GitHub Actions job: it verifies the
+runs the published `v0.1.2` release in a GitHub Actions job: it verifies the
 release artifacts, plans the probes from the manifests in the repository,
 compares the two endpoints, publishes the report and gates the job on the
 verdict.
@@ -25,7 +25,7 @@ repository live in `.github/workflows/` and are not affected by the example.
 
 | Step | What it does |
 |---|---|
-| Download | `gh release download v0.1.0` fetches `varco_0.1.0_linux_amd64.tar.gz` and `checksums.txt` from the release. |
+| Download | `gh release download v0.1.2` fetches `varco_0.1.2_linux_amd64.tar.gz` and `checksums.txt` from the release. |
 | Checksum | `sha256sum --ignore-missing --status -c checksums.txt` verifies the archive against the published checksums. |
 | Attestation | `gh attestation verify` checks the build provenance of the archive. |
 | Extract | The archive is unpacked into `dist/` and `varco version` prints the build. |
