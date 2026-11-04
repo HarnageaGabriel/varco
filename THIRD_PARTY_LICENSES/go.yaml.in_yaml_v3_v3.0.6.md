@@ -1,4 +1,4 @@
-# go.yaml.in/yaml/v3 v3.0.5
+# go.yaml.in/yaml/v3 v3.0.6
 
 License: MIT and Apache-2.0
 
