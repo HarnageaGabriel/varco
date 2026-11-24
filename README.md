@@ -199,7 +199,7 @@ Usage details and examples are in [usage.md](docs/usage.md).
 - [x] **M2** `varco plan` from Ingress manifests
 - [x] **M2.5 Safety and correctness** Redaction by default, cookie attribute comparison, verdict model, and input limits
 - [x] **M3 `varco run`** Comparator and policy evaluator, exceptions file, default-backend and unmatched-route case families, repeated baseline observations for flaky fields, body compared on 2xx by default, request budget and path exclusion, `--dry-run` and `--suggest-exceptions`, and a JSON summary
-- [x] **M4 Production readiness, part 1** Release engineering (the release workflow produces draft releases from `v0.1.0`), planner profiles `nginx` and `generic` ([ADR 0008](docs/adr/0008-planner-profiles.md)), and read-only cluster read via kubectl get
+- [x] **M4 Production readiness, part 1** Release engineering (the release workflow produces draft releases from `v0.1.0`), planner profiles `nginx` and `generic` ([ADR 0008](docs/adr/0008-planner-profiles.md)), and read-only cluster read via kubectl get <!-- keep-version -->
 - [x] **M5 Adoption, part 1** Explanations for known ingress-nginx quirks on `DIFFERENT` cases
 - [ ] **Open for contributors** `kind` end-to-end tests with pinned ingress-nginx and Envoy Gateway (needs Docker), TLS version range and ALPN probes, opt-in TLS security policy, a JUnit/markdown run summary, offline HTML report, CI summaries, Homebrew and krew — see the issues labelled [`good first issue`](https://github.com/HarnageaGabriel/varco/issues?q=is%3Aopen+label%3A%22good+first+issue%22) and [`help wanted`](https://github.com/HarnageaGabriel/varco/issues?q=is%3Aopen+label%3A%22help+wanted%22)
 
