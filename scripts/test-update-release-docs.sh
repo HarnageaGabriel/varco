@@ -99,6 +99,9 @@ for file in $updated; do
     expect_contains "$tmp/out" "$file" "the summary lists $file"
 done
 expect_same "$tmp/repo/CHANGELOG.md" "$fixtures/repo/CHANGELOG.md" 'CHANGELOG.md is untouched'
+expect_contains "$tmp/repo/README.md" 'draft releases from `v0.1.0`' 'the marked roadmap line keeps its old version'
+expect_contains "$tmp/repo/docs/install.md" 'planned after `v0.1.0`' 'the marked Homebrew note keeps its old version'
+expect_contains "$tmp/repo/docs/install.md" 'Reproducibility started after `v0.1.0`' 'the marked reproducibility paragraph keeps its old version'
 
 # 2. A second run changes nothing.
 status=0

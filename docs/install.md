@@ -54,7 +54,7 @@ varco version
 
 ## Homebrew (planned)
 
-Homebrew support is planned after `v0.1.0` (GoReleaser deprecated its `brews` section, so the tap format is being decided). After the release and
+Homebrew support is planned after `v0.1.0` (GoReleaser deprecated its `brews` section, so the tap format is being decided). After the release and <!-- keep-version -->
 `HarnageaGabriel/homebrew-tap` are published:
 
 ```sh
@@ -84,7 +84,7 @@ Every release from the next one on (`v0.1.2`) can be rebuilt bit for bit: the
 release binaries carry the commit metadata, not the build time. `v0.1.0` and
 `v0.1.1` stamped the build time into the binary, so they cannot be reproduced
 bit for bit; a rebuild of those two differs in that field and in the Go build
-ID that follows from it.
+ID that follows from it. <!-- keep-version -->
 
 To rebuild a release and compare the hashes:
 

@@ -12,3 +12,8 @@ base=https://github.com/HarnageaGabriel/varco/releases/download/$version
 
 Krew support is prepared, not published: `.krew.yaml` in the repository has
 the final `v0.1.0` archive hashes but is not submitted to a Krew index yet.
+
+Homebrew support is planned after `v0.1.0` (the tap format is being decided). <!-- keep-version -->
+
+Reproducibility started after `v0.1.0`: `v0.1.0` stamped the build time
+into the binary, so it cannot be reproduced bit for bit. <!-- keep-version -->

@@ -11,6 +11,11 @@
 # examples/github-actions/varco-compare.yml, prints the changed files and
 # changes nothing else: it never commits and never pushes.
 #
+# A paragraph that contains the HTML comment marker <!-- keep-version --> on
+# any of its lines is never rewritten; put the marker on sentences that name
+# an older version on purpose. A paragraph is a run of consecutive non-blank
+# lines; each list item starts a new paragraph.
+#
 # Exit codes: 0 success, 1 error, 2 usage error, 3 an archive is missing from
 # the checksums file, 4 the files to update have uncommitted changes.
 
@@ -165,7 +170,6 @@ fi
 
 old=$current
 new=$version
-old_re=$(printf '%s' "$old" | sed 's/\./\\./g')
 
 awk -v cfile="$checksums" -v oldv="$old" -v newv="$new" -v errfile="$tmpdir/awk.err" -v krewfile="$krew_file" '
     BEGIN {
@@ -236,7 +240,35 @@ awk -v cfile="$checksums" -v oldv="$old" -v newv="$new" -v errfile="$tmpdir/awk.
 index=0
 for doc in $doc_files; do
     index=$((index + 1))
-    sed -e "s/v$old_re/v$new/g" -e "s/varco_${old_re}_/varco_${new}_/g" "$doc" > "$tmpdir/doc.$index"
+    awk -v oldv="$old" -v newv="$new" '
+        function gsub_lit(line, from, to,   out, pos) {
+            out = ""
+            while ((pos = index(line, from)) > 0) {
+                out = out substr(line, 1, pos - 1) to
+                line = substr(line, pos + length(from))
+            }
+            return out line
+        }
+        function flush(   i, line) {
+            for (i = 1; i <= n; i++) {
+                line = buf[i]
+                if (!keep) {
+                    line = gsub_lit(line, "v" oldv, "v" newv)
+                    line = gsub_lit(line, "varco_" oldv "_", "varco_" newv "_")
+                }
+                print line
+            }
+            n = 0
+            keep = 0
+        }
+        /^[ \t\r]*$/ { flush(); print; next }
+        /^[ \t]*([-*+]|[0-9]+\.)[ \t]/ { flush() }
+        {
+            buf[++n] = $0
+            if (index($0, "<!-- keep-version -->") > 0) keep = 1
+        }
+        END { flush() }
+    ' "$doc" > "$tmpdir/doc.$index"
 done
 
 todo=

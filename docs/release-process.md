@@ -46,7 +46,11 @@ stored in the repository.
    `examples/github-actions/varco-compare.yml`. It fails when an archive is
    missing from the checksums, refuses to run when the files it would change
    have uncommitted changes (unless `--force` is given) and changes nothing
-   on a second run. It touches no other file: `CHANGELOG.md`, the ADRs and
+   on a second run. A paragraph that carries the HTML comment marker
+   `<!-- keep-version -->` on any of its lines is never rewritten; use it on
+   sentences that name an older version on purpose. A paragraph is a run of
+   consecutive non-blank lines; each list item starts a new paragraph.
+   It touches no other file: `CHANGELOG.md`, the ADRs and
    the release notes stay as they are. Review the diff and commit it.
    `sh scripts/test-update-release-docs.sh` runs the script against the
    fixtures in `scripts/testdata/release-docs/`.
