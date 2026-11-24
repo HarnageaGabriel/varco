@@ -26,7 +26,8 @@
 # git, and only when the release tag is missing from the local clone.
 #
 # Exit codes: 0 the binaries are reproducible, 1 they differ or the check could
-# not be run, 2 the arguments are wrong.
+# not be run, 2 the released binary needs a different Go toolchain, 64 the
+# arguments are wrong.
 
 set -eu
 
@@ -34,7 +35,8 @@ prog=verify-reproducible.sh
 
 EX_OK=0
 EX_FAIL=1
-EX_USAGE=2
+EX_TOOLCHAIN=2
+EX_USAGE=64
 
 targets='linux/amd64 windows/amd64'
 
@@ -72,7 +74,7 @@ help() {
     printf 'rebuilds the same version from the matching tag in a temporary git\n'
     printf 'worktree, and compares the SHA-256 of both binaries.\n'
     printf '\n'
-    printf 'Exit codes: 0 the binaries are reproducible, 1 they differ, 2 bad arguments.\n'
+    printf 'Exit codes: 0 identical, 1 different or failed, 2 toolchain mismatch, 64 bad arguments.\n'
 }
 
 cleanup() {
@@ -307,7 +309,7 @@ commit_date() {
 # check_toolchain DIR prints the local toolchain and the one of the release.
 check_toolchain() {
     toolchain_dir=$1
-    toolchain_local=$(go env GOVERSION 2>/dev/null || echo unknown)
+    toolchain_local=$(GOTOOLCHAIN=local go env GOVERSION 2>/dev/null || echo unknown)
     toolchain_required=$(awk '/^go [0-9]/ { print $2; exit }' "$toolchain_dir/go.mod" 2>/dev/null || true)
     toolchain_workflow=unknown
     if [ -f "$toolchain_dir/.github/workflows/release.yml" ]; then
@@ -324,6 +326,25 @@ check_toolchain() {
                 "$toolchain_local" "$toolchain_required"
         fi
     fi
+}
+
+# check_archive_toolchain BINARY compares the Go toolchain recorded in BINARY
+# with the local toolchain that build_binary will use.
+check_archive_toolchain() {
+    toolchain_binary=$1
+    toolchain_local=$(GOTOOLCHAIN=local go env GOVERSION 2>/dev/null || echo unknown)
+    toolchain_release=$(go version -m "$toolchain_binary" 2>/dev/null |
+        awk 'NR == 1 { print $NF; exit }')
+    [ -n "$toolchain_release" ] || fail "cannot read the Go toolchain from $toolchain_binary"
+
+    printf 'toolchain: local %s, released binary %s\n' "$toolchain_local" "$toolchain_release"
+    if [ "$toolchain_local" != "$toolchain_release" ]; then
+        printf 'toolchain mismatch: install %s and put its bin directory first on PATH, then rerun this command\n' \
+            "$toolchain_release"
+        printf 'toolchain mismatch: GOTOOLCHAIN cannot select it because this script sets GOTOOLCHAIN=local\n'
+        return "$EX_TOOLCHAIN"
+    fi
+    return "$EX_OK"
 }
 
 # detect_built_date BINARY TARGET prints the build date the binary was built
@@ -412,6 +433,7 @@ check_local() {
 check_archive() {
     archive=$1
     [ -f "$archive" ] || fail "the archive is not found: $archive"
+    archive_dir=$(dirname "$archive")
     archive_name=$(basename "$archive")
     archive_stem=${archive_name%.tar.gz}
     archive_stem=${archive_stem%.zip}
@@ -451,18 +473,18 @@ check_archive() {
     printf 'commit:    %s\n' "$commit"
     printf 'version:   %s\n' "$build_version"
     printf 'date:      %s (commit timestamp, UTC)\n' "$date"
-    check_toolchain "$worktree"
-    printf '\n'
 
     extract_dir=$tmpdir/extract
     mkdir -p "$extract_dir"
     case $archive_name in
-    *.tar.gz|*.tgz) tar -xzf "$archive" -C "$extract_dir" || fail "cannot extract $archive" ;;
+    *.tar.gz|*.tgz)
+        (cd "$archive_dir" && tar -xzf "$archive_name" -C "$extract_dir") || fail "cannot extract $archive"
+        ;;
     *.zip)
         if command -v unzip >/dev/null 2>&1; then
-            unzip -o -q "$archive" -d "$extract_dir" || fail "cannot extract $archive"
+            (cd "$archive_dir" && unzip -o -q "$archive_name" -d "$extract_dir") || fail "cannot extract $archive"
         else
-            tar -xf "$archive" -C "$extract_dir" || fail "cannot extract $archive"
+            (cd "$archive_dir" && tar -xf "$archive_name" -C "$extract_dir") || fail "cannot extract $archive"
         fi
         ;;
     *) fail "the archive is neither a tar.gz nor a zip: $archive_name" ;;
@@ -470,6 +492,11 @@ check_archive() {
 
     release_binary_path=$(find "$extract_dir" -type f -name "$(binary_name "$target_os/$target_arch")" | head -1)
     [ -n "$release_binary_path" ] || fail "the archive does not contain $(binary_name "$target_os/$target_arch")"
+
+    toolchain_status=0
+    check_archive_toolchain "$release_binary_path" || toolchain_status=$?
+    [ "$toolchain_status" -eq 0 ] || return "$toolchain_status"
+    printf '\n'
 
     build_binary "$tmpdir/rebuild" "$target_os/$target_arch" "$build_version" "$commit" "$date"
     rebuild_hash=$(sha256_of "$tmpdir/rebuild/$(binary_name "$target_os/$target_arch")")
@@ -509,7 +536,7 @@ check_archive() {
     fi
 
     note 'the released binary and the rebuilt binary differ'
-    printf 'reason:   the Go toolchain of this machine is %s, the release used the\n' "$(go env GOVERSION)"
+    printf 'reason:   the Go toolchain of this machine is %s, the release used the\n' "$(GOTOOLCHAIN=local go env GOVERSION)"
     printf '          %s of the release workflow; a different toolchain changes the binary.\n' \
         "$(grep -E 'go-version(-file)?:' "$worktree/.github/workflows/release.yml" 2>/dev/null | head -1 | sed 's/^[ \t]*//' || echo unknown)"
     printf 'reason:   GoReleaser stamps version.Date with the commit timestamp,\n'

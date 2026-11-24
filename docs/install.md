@@ -1,21 +1,21 @@
 # Install and verify varco
 
-`v0.1.0` is published as a pre-alpha pre-release on the
-[release page](https://github.com/HarnageaGabriel/varco/releases/tag/v0.1.0).
+`v0.1.2` is published as a pre-alpha pre-release on the
+[release page](https://github.com/HarnageaGabriel/varco/releases/tag/v0.1.2).
 The commands below download and verify the signed artifacts that the release
 workflow published.
 
 ## Release archive
 
 Choose the archive for your operating system and architecture on the
-[release page](https://github.com/HarnageaGabriel/varco/releases/tag/v0.1.0).
-The example uses `v0.1.0` on Linux amd64:
+[release page](https://github.com/HarnageaGabriel/varco/releases/tag/v0.1.2).
+The example uses `v0.1.2` on Linux amd64:
 
 ```sh
 set -euo pipefail
 
-version=v0.1.0
-archive=varco_0.1.0_linux_amd64.tar.gz
+version=v0.1.2
+archive=varco_0.1.2_linux_amd64.tar.gz
 base=https://github.com/HarnageaGabriel/varco/releases/download/$version
 curl -fLO "$base/$archive"
 curl -fLO "$base/checksums.txt"
@@ -65,7 +65,7 @@ brew install HarnageaGabriel/tap/varco
 ## Krew (planned)
 
 Krew support is prepared, not published: `.krew.yaml` in the repository has
-the final `v0.1.0` archive hashes but is not submitted to a Krew index yet.
+the final `v0.1.2` archive hashes but is not submitted to a Krew index yet.
 Once it is available in a configured Krew index:
 
 ```sh
@@ -106,13 +106,20 @@ sh scripts/verify-reproducible.sh "/tmp/varco-release/$archive"
 ```
 
 The script prints the SHA-256 of the released binary and of the rebuild and
-reports whether they are identical. It needs `git`, the Go toolchain of the
-release (the Go version of `go.mod`, Go 1.26 or newer) and a SHA-256 tool: a
-different toolchain produces a different binary. Use the same archive name
-(`varco_VERSION_os_arch.tar.gz`, `.zip` on Windows) as the one you
-downloaded. The repository keeps the line endings of its files at LF
-(`.gitattributes`), so a clone has the same bytes as the release; a checkout
-with CRLF line endings produces a different binary.
+reports whether they are identical. It needs `git`, a SHA-256 tool and the
+exact Go version recorded in the released binary. Put that Go installation's
+`bin` directory first on `PATH`; setting `GOTOOLCHAIN` does not select it
+because the script deliberately builds with `GOTOOLCHAIN=local`. If the local
+and recorded versions differ, the script prints both versions and exits 2
+before rebuilding. Exit 0 means byte-for-byte identical, and exit 1 means a
+real difference (or another verification failure) with matching toolchains.
+
+The `v0.1.2` linux/amd64 and windows/amd64 binaries record Go 1.26.10; with Go
+1.26.10 first on `PATH`, both were byte for byte identical to their rebuilds.
+Use the same archive name (`varco_VERSION_os_arch.tar.gz`, `.zip` on Windows)
+as the one you downloaded. The repository keeps the line endings of its files
+at LF (`.gitattributes`), so a clone has the same bytes as the release; a
+checkout with CRLF line endings produces a different binary.
 
 ## Build from source
 

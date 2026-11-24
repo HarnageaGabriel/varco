@@ -30,8 +30,8 @@ jobs:
       MANIFESTS: manifests
       EXCEPTIONS: varco/exceptions.yaml
       VARCO_REPO: HarnageaGabriel/varco
-      VARCO_TAG: v0.1.0
-      VARCO_ARCHIVE: varco_0.1.0_linux_amd64.tar.gz
+      VARCO_TAG: v0.1.2
+      VARCO_ARCHIVE: varco_0.1.2_linux_amd64.tar.gz
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

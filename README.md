@@ -53,7 +53,7 @@ answers.
 ## Try it now: compare one route on two endpoints
 
 Download the archive for your platform from the
-[release page](https://github.com/HarnageaGabriel/varco/releases/tag/v0.1.0)
+[release page](https://github.com/HarnageaGabriel/varco/releases/tag/v0.1.2)
 and verify it per [install.md](docs/install.md), or build the binary from a
 checkout, then compare a single route. No cluster access is needed:
 
@@ -117,8 +117,8 @@ marked with their exception id. Sensitive values are redacted by default.
 
 ## Status
 
-varco is **pre-alpha**. `v0.1.0` is published as a
-[pre-release](https://github.com/HarnageaGabriel/varco/releases/tag/v0.1.0)
+varco is **pre-alpha**. `v0.1.2` is published as a
+[pre-release](https://github.com/HarnageaGabriel/varco/releases/tag/v0.1.2)
 and is not marked latest. It is not yet on Homebrew or Krew.
 
 | Command | State |
@@ -126,7 +126,7 @@ and is not marked latest. It is not yet on Homebrew or Krew.
 | `varco diff` | Implemented: status, `Location`, security and CORS headers, TLS version, certificate and body hash across two endpoints. |
 | `varco plan` | Implemented: reads Ingress manifests or a live cluster (`--from-cluster`, `kubectl get` only) and generates deterministic test cases plus unsupported findings. Planner profiles `nginx` and `generic` per [ADR 0008](docs/adr/0008-planner-profiles.md). |
 | `varco run` | Implemented: plan execution against two endpoints with a verdict per [ADR 0007](docs/adr/0007-verdict-model.md), exceptions file, per-case outcome with coverage, repeated observations (`--repeat`), body policy (`--body`), request budget (`--max-requests`), family/path filters, `--dry-run`, `--suggest-exceptions`, deterministic explanations, redaction per [ADR 0006](docs/adr/0006-redaction.md). |
-| Releases | `v0.1.0` is published as a pre-alpha [pre-release](https://github.com/HarnageaGabriel/varco/releases/tag/v0.1.0) with checksums, per-archive SBOMs, a Sigstore bundle and a build attestation; download and verification in [install.md](docs/install.md). Not on Homebrew or Krew yet. |
+| Releases | `v0.1.2` is published as a pre-alpha [pre-release](https://github.com/HarnageaGabriel/varco/releases/tag/v0.1.2) with checksums, per-archive SBOMs, a Sigstore bundle and a build attestation; download and verification in [install.md](docs/install.md). Not on Homebrew or Krew yet. |
 
 The output formats and flags can still change between releases.
 
@@ -175,8 +175,8 @@ accepted differences in `varco run`; see [run.md](docs/run.md).
 
 ## Getting started
 
-`v0.1.0` is published as a pre-alpha
-[pre-release](https://github.com/HarnageaGabriel/varco/releases/tag/v0.1.0);
+`v0.1.2` is published as a pre-alpha
+[pre-release](https://github.com/HarnageaGabriel/varco/releases/tag/v0.1.2);
 download and verify it per [install.md](docs/install.md). Building from a
 source checkout instead requires Go 1.26 or newer:
 
@@ -215,7 +215,7 @@ for example a 401 or a redirect to a login page.
 - **No telemetry.** varco contacts only the endpoints you name; no external service, no metrics.
 - **Reporting.** Vulnerabilities go through the process in [SECURITY.md](SECURITY.md).
 
-`v0.1.0` is published as a pre-alpha pre-release: GoReleaser archives with
+`v0.1.2` is published as a pre-alpha pre-release: GoReleaser archives with
 per-archive SBOMs, `checksums.txt` covered by a Sigstore bundle and a GitHub
 build attestation. Verify downloads per [install.md](docs/install.md).
 Homebrew and Krew are not available yet.
