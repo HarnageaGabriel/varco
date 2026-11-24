@@ -8,6 +8,8 @@ Sign every commit with `git commit -s` ([DCO 1.1](https://developercertificate.o
 
 ## Development
 
+For small parallel tasks, follow the [microtask workflow](docs/dev/workflow.md).
+
 Go 1.26+, `golangci-lint`, `govulncheck`.
 
 ```sh

@@ -1,0 +1,38 @@
+name: Microtask
+description: A small, independently mergeable task
+title: "task: "
+labels: [maintainer]
+body:
+  - type: textarea
+    id: objective
+    attributes: {label: Objective}
+    validations: {required: true}
+  - type: textarea
+    id: why
+    attributes: {label: Why}
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Include TOUCH ONLY and DO NOT TOUCH lists.
+    validations: {required: true}
+  - type: textarea
+    id: acceptance
+    attributes: {label: Acceptance criteria}
+    validations: {required: true}
+  - type: textarea
+    id: verify
+    attributes:
+      label: Verify commands
+      render: shell
+    validations: {required: true}
+  - type: textarea
+    id: parallel
+    attributes: {label: Parallel safety}
+    validations: {required: true}
+  - type: dropdown
+    id: size
+    attributes:
+      label: Size
+      options: [XS, S, M]
+    validations: {required: true}

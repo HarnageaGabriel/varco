@@ -4,6 +4,8 @@ HarnageaGabriel maintains varco.
 
 ## Decisions
 
+For parallel small tasks, maintainers use the [microtask workflow](dev/workflow.md), including its queue and release rules.
+
 The maintainer makes project decisions after contributor discussion.
 Significant architecture, protocol, safety, and process decisions are recorded
 as ADRs in [docs/adr](adr/).
