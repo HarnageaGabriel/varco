@@ -106,13 +106,20 @@ sh scripts/verify-reproducible.sh "/tmp/varco-release/$archive"
 ```
 
 The script prints the SHA-256 of the released binary and of the rebuild and
-reports whether they are identical. It needs `git`, the Go toolchain of the
-release (the Go version of `go.mod`, Go 1.26 or newer) and a SHA-256 tool: a
-different toolchain produces a different binary. Use the same archive name
-(`varco_VERSION_os_arch.tar.gz`, `.zip` on Windows) as the one you
-downloaded. The repository keeps the line endings of its files at LF
-(`.gitattributes`), so a clone has the same bytes as the release; a checkout
-with CRLF line endings produces a different binary.
+reports whether they are identical. It needs `git`, a SHA-256 tool and the
+exact Go version recorded in the released binary. Put that Go installation's
+`bin` directory first on `PATH`; setting `GOTOOLCHAIN` does not select it
+because the script deliberately builds with `GOTOOLCHAIN=local`. If the local
+and recorded versions differ, the script prints both versions and exits 2
+before rebuilding. Exit 0 means byte-for-byte identical, and exit 1 means a
+real difference (or another verification failure) with matching toolchains.
+
+The `v0.1.2` linux/amd64 and windows/amd64 binaries record Go 1.26.10; with Go
+1.26.10 first on `PATH`, both were byte for byte identical to their rebuilds.
+Use the same archive name (`varco_VERSION_os_arch.tar.gz`, `.zip` on Windows)
+as the one you downloaded. The repository keeps the line endings of its files
+at LF (`.gitattributes`), so a clone has the same bytes as the release; a
+checkout with CRLF line endings produces a different binary.
 
 ## Build from source
 
