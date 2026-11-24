@@ -27,6 +27,10 @@ func runFixture() model.RunReport {
 		Unsupported: []plan.Finding{{
 			Code: diag.CodePlanAnnotationNotTestable, Ingress: "api", Annotation: "nginx.ingress.kubernetes.io/proxy-read-timeout", Message: "timeouts are not observable black-box",
 		}},
+		Warnings: []plan.Warning{
+			{Code: diag.CodePlanWildcardHost, Ingress: "web", Message: "wildcard host sampled as varco-probe.example.com"},
+			{Code: diag.CodePlanIngressClassExcluded, Ingress: "admin", Message: "Ingress class traefik does not match requested class nginx"},
+		},
 		ExpiredExceptions: []string{"server-header"},
 		IgnoredFields:     policy.IgnoredFields(),
 		Cases: []model.Evaluation{
@@ -91,6 +95,49 @@ func TestRunJSONGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 	goldenRun(t, "json.golden", buffer.Bytes())
+}
+
+// Source: docs/run.md Report; reports without plan warnings omit the additive
+// JSON field and the table section, preserving the pre-warning output shape.
+func TestRunWithoutWarningsOmitsWarnings(t *testing.T) {
+	report := runFixture()
+	report.Warnings = nil
+	for _, format := range []string{"table", "json"} {
+		t.Run(format, func(t *testing.T) {
+			var buffer bytes.Buffer
+			var err error
+			if format == "json" {
+				err = RunJSON(&buffer, report, Options{})
+			} else {
+				err = RunTable(&buffer, report, Options{})
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(buffer.String(), "WARNINGS") || strings.Contains(buffer.String(), `"warnings"`) {
+				t.Fatalf("warning output present:\n%s", buffer.String())
+			}
+		})
+	}
+}
+
+// Source: docs/run.md Report and docs/adr/0006-redaction.md; warning rows use
+// the plan ordering key and escape control bytes before reaching a terminal.
+func TestRunTableSortsAndEscapesWarnings(t *testing.T) {
+	report := model.RunReport{Warnings: []plan.Warning{
+		{Code: diag.CodePlanIngressClassExcluded, Ingress: "z", Message: "last"},
+		{Code: diag.CodePlanWildcardHost, Ingress: "a\nname", Message: "first"},
+	}}
+	var buffer bytes.Buffer
+	if err := RunTable(&buffer, report, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	output := buffer.String()
+	first := strings.Index(output, string(diag.CodePlanWildcardHost))
+	last := strings.Index(output, string(diag.CodePlanIngressClassExcluded))
+	if first < 0 || last < 0 || first > last || !strings.Contains(output, `a\x0aname`) {
+		t.Fatalf("warnings are not sorted and escaped:\n%s", output)
+	}
 }
 
 // Source: docs/adr/0006-redaction.md; every Location value is redacted unless

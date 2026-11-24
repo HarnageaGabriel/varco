@@ -176,6 +176,7 @@ type RunReport struct {
 	Excluded          int            `json:"excluded"`
 	UnsupportedCount  int            `json:"unsupported_count"`
 	Unsupported       []plan.Finding `json:"unsupported"`
+	Warnings          []plan.Warning `json:"warnings,omitempty"`
 	ExpiredExceptions []string       `json:"expired_exceptions"`
 	IgnoredFields     []string       `json:"ignored_fields"`
 	Cases             []Evaluation   `json:"cases"`

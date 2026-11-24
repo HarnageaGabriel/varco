@@ -61,6 +61,13 @@
         "$ref": "#/$defs/finding"
       }
     },
+    "warnings": {
+      "description": "The warnings that qualify the plan. An additive field, so a consumer must accept a document without it.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/warning"
+      }
+    },
     "expired_exceptions": {
       "description": "The ids of the exceptions that are past their expires date.",
       "type": "array",
@@ -237,6 +244,29 @@
         },
         "source": {
           "description": "Where the behavior is documented.",
+          "type": "string"
+        }
+      }
+    },
+    "warning": {
+      "description": "A condition that qualifies the planned cases.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "description": "The stable diagnostic code, for example VAR-PLAN-0004.",
+          "type": "string"
+        },
+        "ingress": {
+          "description": "The Ingress the warning refers to.",
+          "type": "string"
+        },
+        "message": {
+          "description": "The condition that qualifies the plan.",
           "type": "string"
         }
       }
