@@ -20,6 +20,8 @@ human or AI agent), [CONTRIBUTING.md](../../CONTRIBUTING.md) and the ADRs in
 
 ## The open issues these guides serve
 
+Read the [microtask workflow](workflow.md) for parallel issue, branch, worktree and PR rules.
+
 The issues below are the open `good first issue` and `help wanted` issues in
 this repository, with the guide that helps you start. Get the live list with:
 
