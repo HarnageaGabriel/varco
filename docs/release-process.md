@@ -85,6 +85,17 @@ rebuild:
 sh scripts/verify-reproducible.sh varco_0.1.2_linux_amd64.tar.gz
 ```
 
+The release workflow runs this archive check automatically: a read-only
+`Reproducibility` job checks out the tag again and runs the script above on
+the `varco_VERSION_linux_amd64.tar.gz` archive that GoReleaser produced in the
+`Release` job, the same file that was uploaded to the draft release. The
+archive is handed over as a workflow artifact instead of being downloaded
+from the draft, which a read-only token cannot see. The job fails when the
+SHA-256 of the released binary differs from the rebuild (both hashes are
+printed) or when the toolchains differ, so a reproducibility regression is
+visible before the draft is published. Only a tag push exercises this path;
+the `workflow_dispatch` dry-run (snapshot) path does not run this job.
+
 The toolchain must exactly match the toolchain recorded in the released
 binary. Put that Go installation's `bin` directory first on `PATH`; setting
 `GOTOOLCHAIN` does not select it because the script deliberately builds with
