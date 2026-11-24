@@ -21,6 +21,18 @@
       "message": "timeouts are not observable black-box"
     }
   ],
+  "warnings": [
+    {
+      "code": "VAR-PLAN-0004",
+      "ingress": "web",
+      "message": "wildcard host sampled as varco-probe.example.com"
+    },
+    {
+      "code": "VAR-PLAN-0011",
+      "ingress": "admin",
+      "message": "Ingress class traefik does not match requested class nginx"
+    }
+  ],
   "expired_exceptions": [
     "server-header"
   ],
