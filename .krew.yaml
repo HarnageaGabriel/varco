@@ -3,7 +3,7 @@ kind: Plugin
 metadata:
   name: varco
 spec:
-  version: v0.1.0
+  version: v0.1.2
   homepage: https://github.com/HarnageaGabriel/varco
   shortDescription: Compare HTTP endpoint behavior across two deployments.
   description: |
@@ -15,41 +15,41 @@ spec:
         matchLabels:
           os: linux
           arch: amd64
-      uri: https://github.com/HarnageaGabriel/varco/releases/download/v0.1.0/varco_0.1.0_linux_amd64.tar.gz
-      sha256: 08c1e8a14e1bc07c4011aa38843eb74ca93bd23a9541b4f99bd1b3f8c11b5b0e
+      uri: https://github.com/HarnageaGabriel/varco/releases/download/v0.1.2/varco_0.1.2_linux_amd64.tar.gz
+      sha256: 6ba2f38451e030de26696ffda3f31d6eb7b8615491b061da8e7a682736020f7d
       bin: varco
     - selector:
         matchLabels:
           os: linux
           arch: arm64
-      uri: https://github.com/HarnageaGabriel/varco/releases/download/v0.1.0/varco_0.1.0_linux_arm64.tar.gz
-      sha256: c38357941ca95c794e663230198802964ba004c6d62787db5e7e8e673fdbc553
+      uri: https://github.com/HarnageaGabriel/varco/releases/download/v0.1.2/varco_0.1.2_linux_arm64.tar.gz
+      sha256: d77a4c28c0d7a518a8cbebc7371a5275f5bc2742f4ec0004adcb4e927b9d4c5f
       bin: varco
     - selector:
         matchLabels:
           os: darwin
           arch: amd64
-      uri: https://github.com/HarnageaGabriel/varco/releases/download/v0.1.0/varco_0.1.0_darwin_amd64.tar.gz
-      sha256: 3dfb79079f8cbb8409b4afbd62e204c14988cad09da2d453490ac3e660982ceb
+      uri: https://github.com/HarnageaGabriel/varco/releases/download/v0.1.2/varco_0.1.2_darwin_amd64.tar.gz
+      sha256: f0aaf325b30168cb192d7d8f6f486357e25d46752e6e01171ec7e4a2ac9c16a6
       bin: varco
     - selector:
         matchLabels:
           os: darwin
           arch: arm64
-      uri: https://github.com/HarnageaGabriel/varco/releases/download/v0.1.0/varco_0.1.0_darwin_arm64.tar.gz
-      sha256: 99481c478c78b9a504ee91e8a122a59c1d01b45688b9d31c7eb50b0bef476bce
+      uri: https://github.com/HarnageaGabriel/varco/releases/download/v0.1.2/varco_0.1.2_darwin_arm64.tar.gz
+      sha256: 87eaf4301bba830ffe3a6e7a4f3db66a9f6800b76b8f5367780b37e89036a406
       bin: varco
     - selector:
         matchLabels:
           os: windows
           arch: amd64
-      uri: https://github.com/HarnageaGabriel/varco/releases/download/v0.1.0/varco_0.1.0_windows_amd64.zip
-      sha256: 6c83b82df91efaac78f7bd4a2421e4b42e3466b795335577f0b465bbf5f50976
+      uri: https://github.com/HarnageaGabriel/varco/releases/download/v0.1.2/varco_0.1.2_windows_amd64.zip
+      sha256: bc9ce6300ca4cac0b618fd11f313153058103ed13a563236c9fc350ba5aa6b86
       bin: varco.exe
     - selector:
         matchLabels:
           os: windows
           arch: arm64
-      uri: https://github.com/HarnageaGabriel/varco/releases/download/v0.1.0/varco_0.1.0_windows_arm64.zip
-      sha256: bc7396dae7b9ae4ed76c4b67311a67931cac6b09ee2e527d4667e26b5fc46c4b
+      uri: https://github.com/HarnageaGabriel/varco/releases/download/v0.1.2/varco_0.1.2_windows_arm64.zip
+      sha256: 9c764153b8fb916e3586359cd3616e52e27c24688d68a9d13978f8af29233545
       bin: varco.exe
