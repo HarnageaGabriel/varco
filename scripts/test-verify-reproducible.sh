@@ -47,6 +47,14 @@ expect_fail() {
     fi
 }
 
+expect_status() {
+    if [ "$2" -eq "$3" ]; then
+        report 0 "$1"
+    else
+        report 1 "$1 (exit $2, expected $3)"
+    fi
+}
+
 expect_contains() {
     if grep -q -- "$2" "$1"; then
         report 0 "$3"
@@ -205,6 +213,47 @@ if [ "$(git -C "$fixture" worktree list | wc -l)" -eq 1 ]; then
 else
     report 1 'the git worktree of the comparison is removed'
 fi
+
+# Regression source: https://github.com/HarnageaGabriel/varco/issues/79
+# GNU tar treats a colon in an archive operand as a remote-host separator.
+if command -v cygpath >/dev/null 2>&1; then
+    colon_archive=$(cygpath -m "$tmp/varco_1.2.3_linux_amd64.tar.gz")
+else
+    mkdir -p "$tmp/archive:colon"
+    colon_archive=$tmp/archive:colon/varco_1.2.3_linux_amd64.tar.gz
+    cp "$tmp/varco_1.2.3_linux_amd64.tar.gz" "$colon_archive"
+fi
+status=0
+run "$tmp/archive-colon" "$fixture/scripts/verify-reproducible.sh" "$colon_archive" || status=$?
+expect_ok 'an archive path containing a colon is accepted' "$status"
+expect_contains "$tmp/archive-colon" 'identical' 'the colon-path archive matches the rebuild'
+
+# Regression source: https://github.com/HarnageaGabriel/varco/issues/79
+# The released binary is the authoritative source for its Go toolchain.
+real_go=$(command -v go)
+local_go=$(go env GOVERSION)
+mkdir -p "$tmp/fake-bin"
+cat > "$tmp/fake-bin/go" <<'EOF'
+#!/bin/sh
+if [ "$1" = version ] && [ "$2" = -m ]; then
+    "$REAL_GO" "$@" | awk 'NR == 1 { sub(/[[:space:]]go[^[:space:]]*$/, " go0.0.0") } { print }'
+else
+    exec "$REAL_GO" "$@"
+fi
+EOF
+chmod +x "$tmp/fake-bin/go"
+REAL_GO=$real_go
+export REAL_GO
+status=0
+PATH=$tmp/fake-bin:$PATH run "$tmp/toolchain-mismatch" \
+    "$fixture/scripts/verify-reproducible.sh" "$tmp/varco_1.2.3_linux_amd64.tar.gz" || status=$?
+expect_status 'a toolchain mismatch has its own exit code' "$status" 2
+expect_contains "$tmp/toolchain-mismatch" "toolchain: local $local_go, released binary go0.0.0" \
+    'the mismatch reports both Go versions'
+expect_contains "$tmp/toolchain-mismatch" 'put its bin directory first on PATH' \
+    'the mismatch explains how to select the matching Go toolchain'
+expect_contains "$tmp/toolchain-mismatch" 'GOTOOLCHAIN=local' \
+    'the mismatch explains why GOTOOLCHAIN does not select the release toolchain'
 
 # 5. A build that differs is reported as not reproducible.
 # The copy builds the second target with another version, so the two builds

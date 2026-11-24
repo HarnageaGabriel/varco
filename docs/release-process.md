@@ -85,10 +85,15 @@ rebuild:
 sh scripts/verify-reproducible.sh varco_0.1.2_linux_amd64.tar.gz
 ```
 
-The toolchain must match the toolchain of the release, otherwise the
-binaries differ: the release workflow builds with the Go version of `go.mod`
-(`go-version-file: go.mod`), so rebuild with the same Go release. The script
-prints the local and the release toolchain and warns when they differ.
+The toolchain must exactly match the toolchain recorded in the released
+binary. Put that Go installation's `bin` directory first on `PATH`; setting
+`GOTOOLCHAIN` does not select it because the script deliberately builds with
+`GOTOOLCHAIN=local`. The script prints the local and released versions and
+exits 2 before rebuilding when they differ. Exit 0 means byte-for-byte
+identical, and exit 1 means a real difference (or another verification
+failure) with matching toolchains. The `v0.1.2` linux/amd64 and windows/amd64
+binaries record Go 1.26.10; with Go 1.26.10 first on `PATH`, both were byte for
+byte identical to their rebuilds.
 
 The build metadata of a release is the commit metadata: `version.Version`,
 `version.Commit` and `version.Date` hold the version, the commit SHA and the
