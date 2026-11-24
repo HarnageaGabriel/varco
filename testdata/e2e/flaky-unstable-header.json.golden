@@ -39,5 +39,18 @@
       ]
     }
   ],
-  "redacted": true
+  "redacted": true,
+  "run": {
+    "tool": {
+      "version": "dev",
+      "commit": "unknown"
+    },
+    "started_at": "2026-06-01T00:00:00Z",
+    "plan_sha256": "7e033fad868f2edba75a9592941093739203d9fff8c223f2d3e48ae18945bf53",
+    "profile": "nginx",
+    "repeat": 3,
+    "body_policy": "2xx",
+    "max_requests": 0,
+    "rate": 10000
+  }
 }

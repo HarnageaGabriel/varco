@@ -1,3 +1,5 @@
+TOOL         dev
+PLAN         sha256=aaaaaaaaaaaa
 VERDICT      DIFFERENT
 COVERAGE     planned=3 executed=3 equivalent=1 different=1 inconclusive=1 skipped=0
 BODY POLICY  2xx

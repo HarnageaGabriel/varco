@@ -30,5 +30,18 @@
       "error": "VAR-NET-0001: probe old: probe 127.0.0.1:<old-port>: read response: invalid HTTP response"
     }
   ],
-  "redacted": true
+  "redacted": true,
+  "run": {
+    "tool": {
+      "version": "dev",
+      "commit": "unknown"
+    },
+    "started_at": "2026-06-01T00:00:00Z",
+    "plan_sha256": "33df294bea2432b0b38ae0290467f59374a2dcbc045fbc63f3866dae41593e2b",
+    "profile": "nginx",
+    "repeat": 1,
+    "body_policy": "2xx",
+    "max_requests": 0,
+    "rate": 10000
+  }
 }

@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/HarnageaGabriel/varco/internal/cli"
 )
@@ -30,6 +31,9 @@ type runResult struct {
 // streams. stdin is empty because every scenario loads its plan from --plan.
 func runCLI(t *testing.T, args []string) runResult {
 	t.Helper()
+	// A fixed start instant keeps the run provenance golden-stable; the clock
+	// is injected (CONVENTIONS.md: time only through an injected clock).
+	cli.RunNow = func() time.Time { return time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC) }
 	var stdout, stderr bytes.Buffer
 	exit := cli.Run(args, strings.NewReader(""), &stdout, &stderr)
 	return runResult{exit: exit, stdout: stdout.String(), stderr: stderr.String()}

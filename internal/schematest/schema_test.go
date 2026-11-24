@@ -104,6 +104,19 @@ func TestSchemaRejectsInvalidDocuments(t *testing.T) {
 			want: "$.verdict: MAYBE is not one of",
 		},
 		{
+			name:       "wrong run field type",
+			schemaPath: runSchemaPath,
+			goldenPath: runGoldenPath,
+			mutate: func(t *testing.T, document map[string]any) {
+				run, ok := document["run"].(map[string]any)
+				if !ok {
+					t.Fatal("the golden has no run object")
+				}
+				run["repeat"] = "3"
+			},
+			want: "$.run.repeat: expected type integer, got string",
+		},
+		{
 			name:       "unknown plan family",
 			schemaPath: planSchemaPath,
 			goldenPath: planGoldenPath,
@@ -144,7 +157,7 @@ func TestSchemaAcceptsAdditiveTopLevelFields(t *testing.T) {
 func TestSchemaAcceptsDocumentsWithoutTheAdditiveFields(t *testing.T) {
 	schemas := loadSchemas(t)
 	run := decodeObject(t, runGoldenPath)
-	for _, field := range []string{"repeat", "body_policy", "excluded", "warnings", "redacted"} {
+	for _, field := range []string{"repeat", "body_policy", "excluded", "warnings", "redacted", "run"} {
 		delete(run, field)
 	}
 	delete(firstCase(t, run), "explanations")

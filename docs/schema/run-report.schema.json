@@ -92,9 +92,86 @@
     "redacted": {
       "description": "True unless --show-sensitive was used. An additive field, so a consumer must accept a document without it.",
       "type": "boolean"
+    },
+    "run": {
+      "description": "Where the evidence comes from: the tool, start time, executed plan digest and run conditions. An additive field, so a consumer must accept a document without it. run.started_at is the only non-deterministic report field and is excluded from byte-for-byte report comparisons.",
+      "$ref": "#/$defs/run_info"
     }
   },
   "$defs": {
+    "run_info": {
+      "description": "The provenance of one run. It records no endpoint address, credential, header value or other input value (ADR 0006).",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "tool",
+        "started_at",
+        "plan_sha256",
+        "profile",
+        "repeat",
+        "body_policy",
+        "max_requests",
+        "rate"
+      ],
+      "properties": {
+        "tool": {
+          "description": "The varco build that produced the report.",
+          "$ref": "#/$defs/run_tool"
+        },
+        "started_at": {
+          "description": "When the run started, RFC 3339 in UTC, read from the injected clock. The only non-deterministic report field; excluded from byte-for-byte report comparisons.",
+          "type": "string"
+        },
+        "plan_sha256": {
+          "description": "SHA-256 of the canonical plan JSON document that was executed, byte for byte what varco plan --format json writes for that plan; 64 lowercase hex characters.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The planner profile of the executed plan, as used.",
+          "type": "string"
+        },
+        "repeat": {
+          "description": "The --repeat value this run used.",
+          "type": "integer"
+        },
+        "body_policy": {
+          "description": "The --body policy in force.",
+          "type": "string",
+          "enum": [
+            "2xx",
+            "hash",
+            "none"
+          ]
+        },
+        "max_requests": {
+          "description": "The --max-requests budget in force; 0 means unlimited.",
+          "type": "integer"
+        },
+        "rate": {
+          "description": "The --rate limit in force, in requests per second.",
+          "type": "number"
+        }
+      }
+    },
+    "run_tool": {
+      "description": "The build metadata of the tool that produced the report, as varco version reports it.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "version",
+        "commit"
+      ],
+      "properties": {
+        "version": {
+          "description": "The tool version.",
+          "type": "string"
+        },
+        "commit": {
+          "description": "The build commit.",
+          "type": "string"
+        }
+      }
+    },
     "coverage": {
       "description": "How much of the plan the run observed (ADR 0007).",
       "type": "object",

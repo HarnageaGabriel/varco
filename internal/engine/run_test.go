@@ -21,6 +21,7 @@ import (
 	"github.com/HarnageaGabriel/varco/internal/policy"
 	"github.com/HarnageaGabriel/varco/internal/probe"
 	"github.com/HarnageaGabriel/varco/internal/result"
+	"github.com/HarnageaGabriel/varco/internal/version"
 )
 
 var runNow = time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
@@ -70,6 +71,39 @@ func TestRunEquivalentHTTP(t *testing.T) {
 	}
 	if len(report.IgnoredFields) == 0 {
 		t.Fatal("ignored fields not reported")
+	}
+}
+
+// Source: docs/run.md Run provenance; the report records the tool, the start
+// instant from the injected clock, the executed plan digest and the run
+// conditions, and no input value.
+func TestRunRecordsProvenance(t *testing.T) {
+	oldServer, newServer := httpServer(t, 200, "same"), httpServer(t, 200, "same")
+	config := httpConfig(t, oldServer, newServer)
+	config.Profile = "nginx"
+	config.PlanSHA256 = strings.Repeat("a", 64)
+	config.Repeat = 2
+	config.BodyPolicy = compare.BodyPolicyHash
+	config.MaxRequests = 8
+	report, err := Run(context.Background(), config, fakeClock{ticksOf(64)}, probe.Do)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Run == nil {
+		t.Fatal("report has no run object")
+	}
+	got := *report.Run
+	if got.Tool != (model.RunTool{Version: version.Version, Commit: version.Commit}) {
+		t.Fatalf("tool = %+v", got.Tool)
+	}
+	if got.StartedAt != runNow.Format(time.RFC3339) {
+		t.Fatalf("started_at = %q, want %q", got.StartedAt, runNow.Format(time.RFC3339))
+	}
+	if got.PlanSHA256 != config.PlanSHA256 || got.Profile != "nginx" {
+		t.Fatalf("plan = %q profile = %q", got.PlanSHA256, got.Profile)
+	}
+	if got.Repeat != 2 || got.BodyPolicy != "hash" || got.MaxRequests != 8 || got.Rate != 10000 {
+		t.Fatalf("conditions = %+v", got)
 	}
 }
 
