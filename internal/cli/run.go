@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -30,6 +33,22 @@ import (
 
 // runMethods are the only methods a plan may contain (ADR 0003).
 var runMethods = map[string]bool{"GET": true, "HEAD": true, "OPTIONS": true}
+
+// RunNow reports the run start instant. It is a variable so a test can inject
+// a fake clock; production reads the single wall-clock edge (CONVENTIONS.md).
+var RunNow = func() time.Time { return clock.Real{}.Now().UTC() }
+
+// planSHA256 digests the canonical plan document exactly as `varco plan
+// --format json` writes it, so the digest identifies the executed plan no
+// matter how it was loaded.
+func planSHA256(manifest plan.Plan) (string, error) {
+	var buffer bytes.Buffer
+	if err := writePlanJSON(&buffer, manifest); err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(buffer.Bytes())
+	return hex.EncodeToString(sum[:]), nil
+}
 
 func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("run", flag.ContinueOnError)
@@ -140,6 +159,11 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if code != 0 {
 		return code
 	}
+	digest, err := planSHA256(manifest)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "run:", err)
+		return 4
+	}
 	probeCases, excluded := engine.FilterCases(model.FromPlanCases(manifest.Cases), families, excludePaths)
 	if code := unsupportedMethodFailure(probeCases, stderr); code != 0 {
 		return code
@@ -166,7 +190,9 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		Exceptions:  exceptionFile,
 		Unsupported: manifest.Unsupported,
 		Warnings:    manifest.Warnings,
-		Now:         clock.Real{}.Now().UTC(),
+		Profile:     manifest.Profile,
+		PlanSHA256:  digest,
+		Now:         RunNow(),
 	}
 	if *dryRun {
 		printDryRun(stdout, engine.DryRun(config))

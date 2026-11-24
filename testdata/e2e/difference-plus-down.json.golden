@@ -50,5 +50,18 @@
       "error": "budget"
     }
   ],
-  "redacted": true
+  "redacted": true,
+  "run": {
+    "tool": {
+      "version": "dev",
+      "commit": "unknown"
+    },
+    "started_at": "2026-06-01T00:00:00Z",
+    "plan_sha256": "e7e0eb6809af12cdfc180023e9d1657088ae0b079025f3a829ca11e23d238115",
+    "profile": "nginx",
+    "repeat": 1,
+    "body_policy": "2xx",
+    "max_requests": 2,
+    "rate": 10000
+  }
 }

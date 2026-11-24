@@ -58,6 +58,16 @@ func runFixture() model.RunReport {
 			},
 			{CaseID: "cccccccccccc", Host: "api.example.com", Method: "GET", Path: "/cb", Family: "base", Outcome: model.OutcomeInconclusive, Differences: []model.Difference{}, Error: "VAR-NET-0001: probe 10.0.0.2:80: dial tcp: connection refused"},
 		},
+		Run: &model.RunInfo{
+			Tool:        model.RunTool{Version: "dev", Commit: "unknown"},
+			StartedAt:   "2026-06-01T00:00:00Z",
+			PlanSHA256:  strings.Repeat("a", 64),
+			Profile:     "nginx",
+			Repeat:      3,
+			BodyPolicy:  "2xx",
+			MaxRequests: 0,
+			Rate:        5,
+		},
 	}
 }
 

@@ -165,6 +165,28 @@ type Coverage struct {
 	Skipped      int `json:"skipped"`
 }
 
+// RunTool identifies the varco build that produced a report.
+type RunTool struct {
+	Version string `json:"version"`
+	Commit  string `json:"commit"`
+}
+
+// RunInfo records where the evidence of a run comes from: the tool that
+// produced it, when it started, the plan it executed and the conditions it ran
+// under. It carries no endpoint address, credential, header value or other
+// input value (ADR 0006). StartedAt is the only non-deterministic field of a
+// report and is excluded from byte-for-byte report comparisons (docs/run.md).
+type RunInfo struct {
+	Tool        RunTool `json:"tool"`
+	StartedAt   string  `json:"started_at"`
+	PlanSHA256  string  `json:"plan_sha256"`
+	Profile     string  `json:"profile"`
+	Repeat      int     `json:"repeat"`
+	BodyPolicy  string  `json:"body_policy"`
+	MaxRequests int     `json:"max_requests"`
+	Rate        float64 `json:"rate"`
+}
+
 // RunReport is the complete, versioned result of `varco run`. Cases are sorted
 // by the same key plan uses, so output never depends on completion order.
 type RunReport struct {
@@ -181,6 +203,10 @@ type RunReport struct {
 	IgnoredFields     []string       `json:"ignored_fields"`
 	Cases             []Evaluation   `json:"cases"`
 	Redacted          bool           `json:"redacted"`
+
+	// Run records the provenance of the run. It is additive: a consumer must
+	// accept a document without it.
+	Run *RunInfo `json:"run,omitempty"`
 
 	// Unstable lists the (host, field) pairs observed unstable, in stable order.
 	// It drives --suggest-exceptions and is not part of the JSON contract.

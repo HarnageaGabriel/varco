@@ -21,6 +21,7 @@ import (
 	"github.com/HarnageaGabriel/varco/internal/policy"
 	"github.com/HarnageaGabriel/varco/internal/probe"
 	"github.com/HarnageaGabriel/varco/internal/result"
+	"github.com/HarnageaGabriel/varco/internal/version"
 )
 
 // Request bounds for a run.
@@ -76,7 +77,12 @@ type RunConfig struct {
 	Exceptions  policy.File
 	Unsupported []plan.Finding
 	Warnings    []plan.Warning
-	// Now is the injected clock used to expire exceptions (ADR 0007).
+	// Profile is the planner profile of the executed plan.
+	Profile string
+	// PlanSHA256 is the digest of the canonical plan document that was executed.
+	PlanSHA256 string
+	// Now is the injected clock used to expire exceptions (ADR 0007) and to
+	// record the run start instant.
 	Now time.Time
 	// Progress, if set, is called as each case completes.
 	Progress func(done, total int, item model.ProbeCase, outcome model.Outcome)
@@ -213,6 +219,16 @@ func Run(ctx context.Context, config RunConfig, clk clock.Clock, probeFn ProbeFu
 		IgnoredFields:     policy.IgnoredFields(),
 		Cases:             evaluations,
 		Unstable:          collectUnstable(evaluations),
+		Run: &model.RunInfo{
+			Tool:        model.RunTool{Version: version.Version, Commit: version.Commit},
+			StartedAt:   config.Now.UTC().Format(time.RFC3339),
+			PlanSHA256:  config.PlanSHA256,
+			Profile:     config.Profile,
+			Repeat:      config.Repeat,
+			BodyPolicy:  string(config.BodyPolicy),
+			MaxRequests: config.MaxRequests,
+			Rate:        config.Rate,
+		},
 	}
 	report.Verdict = model.Verdict(report)
 	return report, nil

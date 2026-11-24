@@ -22,6 +22,14 @@ const explanationIndent = 10
 // and are marked with their exception id (ADR 0007).
 func RunTable(w io.Writer, report model.RunReport, options Options) error {
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+	if report.Run != nil {
+		if err := writeRow(tw, "TOOL", report.Run.Tool.Version); err != nil {
+			return err
+		}
+		if err := writeRow(tw, "PLAN", "sha256="+shortDigest(report.Run.PlanSHA256)); err != nil {
+			return err
+		}
+	}
 	coverage := report.Coverage
 	if err := writeRow(tw, "VERDICT", string(report.Verdict)); err != nil {
 		return err
@@ -97,6 +105,15 @@ func RunTable(w io.Writer, report model.RunReport, options Options) error {
 		}
 	}
 	return tw.Flush()
+}
+
+// shortDigest keeps the table readable: the plan digest shows its first 12 hex
+// characters. The JSON report keeps the full value.
+func shortDigest(digest string) string {
+	if len(digest) > 12 {
+		return digest[:12]
+	}
+	return digest
 }
 
 // shortenBody keeps the table readable: a body value shows the first 12 hex

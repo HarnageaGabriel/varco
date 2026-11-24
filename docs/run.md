@@ -213,9 +213,32 @@ trailer headers as `Trailer:<Name>`, `tls.version`, `certificate.<field>`
 | `ignored_fields` | fields left out of every comparison, reported so nothing is invisible. |
 | `cases` | one evaluation per case, in plan order: `case_id`, `outcome`, `differences`, `explanations` when present, `error`. |
 | `redacted` | `true` unless `--show-sensitive`. |
+| `run` | provenance of the run: `tool`, `started_at`, `plan_sha256`, `profile`, `repeat`, `body_policy`, `max_requests`, `rate`; see [Run provenance](#run-provenance). |
 
 The `warnings` field is additive, like the report's other optional fields;
 `schema_version` stays `1`.
+
+### Run provenance
+
+The additive `run` object records where the evidence comes from, so a report
+can be attached to a change record and compared with a later run:
+
+| Field | Meaning |
+|---|---|
+| `run.tool.version`, `run.tool.commit` | the varco build that produced the report (the values `varco version` prints). |
+| `run.started_at` | when the run started, RFC 3339 in UTC, read from the injected clock. |
+| `run.plan_sha256` | SHA-256 of the canonical plan document that was executed: the exact bytes `varco plan --format json` writes for that plan (64 lowercase hex characters). |
+| `run.profile` | the planner profile of the executed plan, as used. |
+| `run.repeat` | the `--repeat` value this run used. |
+| `run.body_policy` | the `--body` policy in force (`2xx`, `hash` or `none`). |
+| `run.max_requests` | the `--max-requests` budget in force (`0` means unlimited). |
+| `run.rate` | the `--rate` limit in force, in requests per second. |
+
+`run` records no endpoint address, credential, header value or any other input
+value ([ADR 0006](adr/0006-redaction.md)). `run.started_at` is the only
+non-deterministic field of a report and is excluded from any byte-for-byte
+comparison of reports: drop the `run` object before diffing two reports. The
+object is additive; `schema_version` stays `1`.
 
 The JSON report is published as a JSON Schema:
 [run-report.schema.json](schema/run-report.schema.json). It names every field,
@@ -225,8 +248,10 @@ unknown top-level field, because a new top-level field is an additive change
 that keeps `schema_version` at `1`; see [docs/schema](schema/) for the
 compatibility promise.
 
-`--format table` prints a summary block (verdict, coverage, body policy, repeat,
-excluded, unsupported count, expired exceptions, ignored fields), plus a
+`--format table` prints a `TOOL` line with the tool version and a `PLAN` line
+with the plan digest shortened to its first 12 hex characters, then a summary
+block (verdict, coverage, body policy, repeat, excluded, unsupported count,
+expired exceptions, ignored fields), plus a
 `WARNINGS` section when the plan has warnings, followed by one row per
 reportable case and its differences. Each row carries the case `ID`,
 `HOST`, `METHOD`, `PATH` and `FAMILY` beside the outcome, so a difference is
@@ -297,4 +322,5 @@ varco run --plan plan.json --old 10.0.0.1 --new 10.0.0.2 --exceptions exceptions
 
 Same input, same output: cases are emitted in plan order regardless of
 completion order, no map iteration reaches the output, and the clock is injected
-(used only to expire exceptions). No AI is in the main path.
+(used to expire exceptions and to record `run.started_at`, the only
+non-deterministic report field). No AI is in the main path.

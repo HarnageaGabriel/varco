@@ -29,5 +29,18 @@
       "differences": []
     }
   ],
-  "redacted": true
+  "redacted": true,
+  "run": {
+    "tool": {
+      "version": "dev",
+      "commit": "unknown"
+    },
+    "started_at": "2026-06-01T00:00:00Z",
+    "plan_sha256": "d3b46f73c0aca78662ab92deb128030fa8988fea11afbcfa1c75e09b7fbb0937",
+    "profile": "nginx",
+    "repeat": 1,
+    "body_policy": "2xx",
+    "max_requests": 0,
+    "rate": 10000
+  }
 }

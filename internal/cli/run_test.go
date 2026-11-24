@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -11,10 +13,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/HarnageaGabriel/varco/internal/diag"
 	"github.com/HarnageaGabriel/varco/internal/plan"
 	"github.com/HarnageaGabriel/varco/internal/report"
+	"github.com/HarnageaGabriel/varco/internal/version"
 )
 
 func planJSON(t *testing.T, cases []plan.Case) string {
@@ -201,6 +205,62 @@ func TestRunCommand(t *testing.T) {
 			t.Fatalf("code=%d stderr=%q", code, stderr.String())
 		}
 	})
+}
+
+// Source: docs/run.md Run provenance; the JSON report records the tool, the
+// injected start instant and the digest of the canonical plan document, and
+// the table shows the TOOL line and the shortened digest.
+func TestRunProvenance(t *testing.T) {
+	fixed := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	original := RunNow
+	RunNow = func() time.Time { return fixed }
+	t.Cleanup(func() { RunNow = original })
+
+	server := statusServer(http.StatusOK)
+	defer server.Close()
+	addr := server.Listener.Addr().String()
+	cases := []plan.Case{{ID: "aaaaaaaaaaaa", Host: "app.example", Scheme: "http", Method: "GET", Path: "/", Family: "base"}}
+	input := planJSON(t, cases)
+	var canonical bytes.Buffer
+	if err := writePlanJSON(&canonical, plan.Plan{Cases: cases}); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(canonical.Bytes())
+	wantDigest := hex.EncodeToString(sum[:])
+
+	base := []string{"run", "--rate", "10000", "--concurrency", "4", "--quiet", "--plan", "-", "--old", addr, "--new", addr}
+	var stdout, stderr bytes.Buffer
+	if code := Run(append(append([]string{}, base...), "--format", "json"), strings.NewReader(input), &stdout, &stderr); code != 0 {
+		t.Fatalf("code=%d stderr=%q", code, stderr.String())
+	}
+	var document struct {
+		Run struct {
+			Tool struct {
+				Version string `json:"version"`
+				Commit  string `json:"commit"`
+			} `json:"tool"`
+			StartedAt  string  `json:"started_at"`
+			PlanSHA256 string  `json:"plan_sha256"`
+			Rate       float64 `json:"rate"`
+		} `json:"run"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &document); err != nil {
+		t.Fatal(err)
+	}
+	if document.Run.Tool.Version != version.Version || document.Run.Tool.Commit != version.Commit {
+		t.Fatalf("tool = %+v", document.Run.Tool)
+	}
+	if document.Run.StartedAt != "2026-06-01T00:00:00Z" || document.Run.PlanSHA256 != wantDigest || document.Run.Rate != 10000 {
+		t.Fatalf("run = %+v, want digest %s", document.Run, wantDigest)
+	}
+
+	stdout.Reset()
+	if code := Run(append([]string{}, base...), strings.NewReader(input), &stdout, &stderr); code != 0 {
+		t.Fatalf("code=%d stderr=%q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "TOOL") || !strings.Contains(stdout.String(), "sha256="+wantDigest[:12]) {
+		t.Fatalf("table lacks provenance lines:\n%s", stdout.String())
+	}
 }
 
 // Source: docs/exit-codes.md; a proven difference (1) outranks missing data (3).
