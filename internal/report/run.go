@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"text/tabwriter"
 
 	"github.com/HarnageaGabriel/varco/internal/model"
+	"github.com/HarnageaGabriel/varco/internal/plan"
 	"github.com/HarnageaGabriel/varco/internal/redact"
 )
 
@@ -39,6 +41,19 @@ func RunTable(w io.Writer, report model.RunReport, options Options) error {
 	}
 	if err := writeRow(tw, "UNSUPPORTED", fmt.Sprintf("%d", report.UnsupportedCount)); err != nil {
 		return err
+	}
+	if len(report.Warnings) != 0 {
+		if err := writeRow(tw, fmt.Sprintf("WARNINGS %d", len(report.Warnings))); err != nil {
+			return err
+		}
+		if err := writeRow(tw, "CODE", "INGRESS", "MESSAGE"); err != nil {
+			return err
+		}
+		for _, warning := range sortedWarnings(report.Warnings) {
+			if err := writeRow(tw, string(warning.Code), warning.Ingress, warning.Message); err != nil {
+				return err
+			}
+		}
 	}
 	if err := writeRow(tw, "EXPIRED EXCEPTIONS", orDash(report.ExpiredExceptions)); err != nil {
 		return err
@@ -122,6 +137,7 @@ func displayReport(report model.RunReport, options Options) model.RunReport {
 	display := report
 	display.Redacted = !options.ShowSensitive
 	display.Unsupported = nonNilFindings(report.Unsupported)
+	display.Warnings = sortedWarnings(report.Warnings)
 	display.ExpiredExceptions = nonNilStrings(report.ExpiredExceptions)
 	display.IgnoredFields = nonNilStrings(report.IgnoredFields)
 	display.Cases = make([]model.Evaluation, len(report.Cases))
@@ -137,6 +153,25 @@ func displayReport(report model.RunReport, options Options) model.RunReport {
 		display.Cases[i] = item
 	}
 	return display
+}
+
+// sortedWarnings returns a copy ordered by the plan warning key, keeping run
+// output deterministic even when a hand-written --plan document is unordered.
+func sortedWarnings(warnings []plan.Warning) []plan.Warning {
+	if len(warnings) == 0 {
+		return warnings
+	}
+	ordered := append([]plan.Warning(nil), warnings...)
+	sort.Slice(ordered, func(i, j int) bool {
+		if ordered[i].Code != ordered[j].Code {
+			return ordered[i].Code < ordered[j].Code
+		}
+		if ordered[i].Ingress != ordered[j].Ingress {
+			return ordered[i].Ingress < ordered[j].Ingress
+		}
+		return ordered[i].Message < ordered[j].Message
+	})
+	return ordered
 }
 
 // reportableCases selects the cases the table lists: every case that is not

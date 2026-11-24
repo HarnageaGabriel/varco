@@ -144,7 +144,7 @@ func TestSchemaAcceptsAdditiveTopLevelFields(t *testing.T) {
 func TestSchemaAcceptsDocumentsWithoutTheAdditiveFields(t *testing.T) {
 	schemas := loadSchemas(t)
 	run := decodeObject(t, runGoldenPath)
-	for _, field := range []string{"repeat", "body_policy", "excluded", "redacted"} {
+	for _, field := range []string{"repeat", "body_policy", "excluded", "warnings", "redacted"} {
 		delete(run, field)
 	}
 	delete(firstCase(t, run), "explanations")

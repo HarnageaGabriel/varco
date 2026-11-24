@@ -1,9 +1,13 @@
-VERDICT             DIFFERENT
-COVERAGE            planned=3 executed=3 equivalent=1 different=1 inconclusive=1 skipped=0
-BODY POLICY         2xx
-REPEAT              3
-EXCLUDED            1
-UNSUPPORTED         1
+VERDICT      DIFFERENT
+COVERAGE     planned=3 executed=3 equivalent=1 different=1 inconclusive=1 skipped=0
+BODY POLICY  2xx
+REPEAT       3
+EXCLUDED     1
+UNSUPPORTED  1
+WARNINGS 2
+CODE                INGRESS  MESSAGE
+VAR-PLAN-0004       web      wildcard host sampled as varco-probe.example.com
+VAR-PLAN-0011       admin    Ingress class traefik does not match requested class nginx
 EXPIRED EXCEPTIONS  server-header
 IGNORED FIELDS      Date, Server, Via, X-Request-Id, Set-Cookie values
 CASES 2

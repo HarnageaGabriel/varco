@@ -165,6 +165,7 @@ func runRun(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		Excluded:    excluded,
 		Exceptions:  exceptionFile,
 		Unsupported: manifest.Unsupported,
+		Warnings:    manifest.Warnings,
 		Now:         clock.Real{}.Now().UTC(),
 	}
 	if *dryRun {

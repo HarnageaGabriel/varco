@@ -208,12 +208,14 @@ trailer headers as `Trailer:<Name>`, `tls.version`, `certificate.<field>`
 | `body_policy` | the `--body` policy in force (`2xx`, `hash` or `none`). |
 | `excluded` | cases removed by `--family`/`--exclude-path` before the run. |
 | `unsupported_count`, `unsupported` | the plan's unsupported findings. |
+| `warnings` | the plan warnings that qualify the cases; omitted when there are none. |
 | `expired_exceptions` | ids of exceptions past their `expires` date. |
 | `ignored_fields` | fields left out of every comparison, reported so nothing is invisible. |
 | `cases` | one evaluation per case, in plan order: `case_id`, `outcome`, `differences`, `explanations` when present, `error`. |
 | `redacted` | `true` unless `--show-sensitive`. |
 
-The last three fields are additive; `schema_version` stays `1`.
+The `warnings` field is additive, like the report's other optional fields;
+`schema_version` stays `1`.
 
 The JSON report is published as a JSON Schema:
 [run-report.schema.json](schema/run-report.schema.json). It names every field,
@@ -224,8 +226,9 @@ that keeps `schema_version` at `1`; see [docs/schema](schema/) for the
 compatibility promise.
 
 `--format table` prints a summary block (verdict, coverage, body policy, repeat,
-excluded, unsupported count, expired exceptions, ignored fields) followed by one
-row per reportable case and its differences. Each row carries the case `ID`,
+excluded, unsupported count, expired exceptions, ignored fields), plus a
+`WARNINGS` section when the plan has warnings, followed by one row per
+reportable case and its differences. Each row carries the case `ID`,
 `HOST`, `METHOD`, `PATH` and `FAMILY` beside the outcome, so a difference is
 attributable without opening the plan JSON. A `body` value in the table is
 shortened to `sha256=<first 12 hex> size=<n>`; the JSON report keeps the full

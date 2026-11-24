@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/HarnageaGabriel/varco/internal/diag"
 	"github.com/HarnageaGabriel/varco/internal/plan"
 	"github.com/HarnageaGabriel/varco/internal/report"
 )
@@ -127,6 +128,36 @@ func TestRunCommand(t *testing.T) {
 		code := Run(append(append([]string{}, base...), "-f", manifestPath, "--old", addr, "--new", addr), strings.NewReader(""), &stdout, &stderr)
 		if code != 0 || !strings.Contains(stdout.String(), "VERDICT") || !strings.Contains(stdout.String(), "EQUIVALENT") {
 			t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+		}
+	})
+
+	// Source: docs/run.md Report; run preserves warnings from a loaded plan.
+	t.Run("plan warnings reach report", func(t *testing.T) {
+		addr := same.Listener.Addr().String()
+		input := planDocumentJSON(t, nil, []plan.Warning{{
+			Code: diag.CodePlanWildcardHost, Ingress: "default/app", Message: "wildcard host was sampled",
+		}})
+		var stdout, stderr bytes.Buffer
+		args := append(append([]string{}, base...), "--plan", "-", "--old", addr, "--new", addr)
+		if code := Run(args, strings.NewReader(input), &stdout, &stderr); code != 0 {
+			t.Fatalf("code=%d stderr=%q", code, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "WARNINGS 1") || !strings.Contains(stdout.String(), "VAR-PLAN-0004") {
+			t.Fatalf("stdout = %q", stdout.String())
+		}
+	})
+
+	// Source: docs/plan.md --ingress-class and docs/run.md Report; planning
+	// manifests in-process carries the generated exclusion warning into run.
+	t.Run("manifest warnings reach report", func(t *testing.T) {
+		addr := same.Listener.Addr().String()
+		var stdout, stderr bytes.Buffer
+		args := append(append([]string{}, base...), "-f", manifestPath, "--ingress-class", "traefik", "--old", addr, "--new", addr)
+		if code := Run(args, strings.NewReader(""), &stdout, &stderr); code != 0 {
+			t.Fatalf("code=%d stderr=%q", code, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "WARNINGS 1") || !strings.Contains(stdout.String(), "VAR-PLAN-0011") {
+			t.Fatalf("stdout = %q", stdout.String())
 		}
 	})
 

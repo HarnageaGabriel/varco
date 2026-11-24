@@ -75,6 +75,7 @@ type RunConfig struct {
 	Excluded    int
 	Exceptions  policy.File
 	Unsupported []plan.Finding
+	Warnings    []plan.Warning
 	// Now is the injected clock used to expire exceptions (ADR 0007).
 	Now time.Time
 	// Progress, if set, is called as each case completes.
@@ -207,6 +208,7 @@ func Run(ctx context.Context, config RunConfig, clk clock.Clock, probeFn ProbeFu
 		Excluded:          config.Excluded,
 		UnsupportedCount:  len(config.Unsupported),
 		Unsupported:       config.Unsupported,
+		Warnings:          config.Warnings,
 		ExpiredExceptions: config.Exceptions.ExpiredIDs(config.Now),
 		IgnoredFields:     policy.IgnoredFields(),
 		Cases:             evaluations,
