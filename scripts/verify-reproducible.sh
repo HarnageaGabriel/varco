@@ -309,7 +309,7 @@ commit_date() {
 # check_toolchain DIR prints the local toolchain and the one of the release.
 check_toolchain() {
     toolchain_dir=$1
-    toolchain_local=$(go env GOVERSION 2>/dev/null || echo unknown)
+    toolchain_local=$(GOTOOLCHAIN=local go env GOVERSION 2>/dev/null || echo unknown)
     toolchain_required=$(awk '/^go [0-9]/ { print $2; exit }' "$toolchain_dir/go.mod" 2>/dev/null || true)
     toolchain_workflow=unknown
     if [ -f "$toolchain_dir/.github/workflows/release.yml" ]; then
@@ -332,7 +332,7 @@ check_toolchain() {
 # with the local toolchain that build_binary will use.
 check_archive_toolchain() {
     toolchain_binary=$1
-    toolchain_local=$(go env GOVERSION 2>/dev/null || echo unknown)
+    toolchain_local=$(GOTOOLCHAIN=local go env GOVERSION 2>/dev/null || echo unknown)
     toolchain_release=$(go version -m "$toolchain_binary" 2>/dev/null |
         awk 'NR == 1 { print $NF; exit }')
     [ -n "$toolchain_release" ] || fail "cannot read the Go toolchain from $toolchain_binary"
@@ -536,7 +536,7 @@ check_archive() {
     fi
 
     note 'the released binary and the rebuilt binary differ'
-    printf 'reason:   the Go toolchain of this machine is %s, the release used the\n' "$(go env GOVERSION)"
+    printf 'reason:   the Go toolchain of this machine is %s, the release used the\n' "$(GOTOOLCHAIN=local go env GOVERSION)"
     printf '          %s of the release workflow; a different toolchain changes the binary.\n' \
         "$(grep -E 'go-version(-file)?:' "$worktree/.github/workflows/release.yml" 2>/dev/null | head -1 | sed 's/^[ \t]*//' || echo unknown)"
     printf 'reason:   GoReleaser stamps version.Date with the commit timestamp,\n'

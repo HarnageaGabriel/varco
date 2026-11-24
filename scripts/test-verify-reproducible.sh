@@ -231,7 +231,7 @@ expect_contains "$tmp/archive-colon" 'identical' 'the colon-path archive matches
 # Regression source: https://github.com/HarnageaGabriel/varco/issues/79
 # The released binary is the authoritative source for its Go toolchain.
 real_go=$(command -v go)
-local_go=$(go env GOVERSION)
+local_go=$(GOTOOLCHAIN=local go env GOVERSION)
 mkdir -p "$tmp/fake-bin"
 cat > "$tmp/fake-bin/go" <<'EOF'
 #!/bin/sh
